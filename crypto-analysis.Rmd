@@ -3,12 +3,14 @@ title: "Examining predictive pricing indicators for cryptocurrency assets"
 author: "Tiffany Valdecantos, Terrill Toe, Adetayo Adegoke"
 date: "`r format(Sys.Date())`"
 csl: vancouver.csl
+biblio-style: vancouver
 bibliography: references.bib
 font-size: 11pt
 link-citations: true
 output: 
   pdf_document:
     toc: FALSE
+    citation_package: biblatex
 ---
 
 ```{r setup, include=FALSE}
@@ -25,10 +27,6 @@ suppressMessages(library(olsrr))
 
 # Research Question and Motivation
 
-The motivation behind this study is the potential for monetary gain. If this study unveils a method to predict future movements in Bitcoin prices, then there is an opportunity to make financial gains by investing or selling Bitcoin at the right time.
-
-Is the technical analysis method of comparing current Bitcoin prices relative to a moving average effective in determining the future decrease of Bitcoin prices?
-
 According to the US government's Internal Revenue Service, a virtual currency is a digital representation of value, other than a representation of the U.S. dollar or a foreign currency ("real currency"), that functions as a unit of account, a store of value, and a medium of exchange. The agency also defines cryptocurrencies as a type of virtual currency that uses cryptography to secure transactions that are digitally recorded on a distributed ledger, such as a blockchain @CryptoDefIrs.
 
 Cryptocurrencies are mainstream assets that are electronically traded, similar to stocks and other equity types. There are many different cryptocurrencies, with several more being introduced to the public every few months for the opportunity to make transactions based on these assets. There is value to examining factors that drive cryptocurrency asset prices, since the market size of these currencies is currently over 1 trillion USD in traditional fiat USD, and is projected to grow to over 32 trillion USD by 2027 @CryptoMarketSizeYahoo. Because of their growing market size, cryptocurrencies have a significant influence on the global economy, and understanding cryptocurrency asset class pricing predictors can inform governments, businesses and retail investors.
@@ -37,7 +35,7 @@ Cryptocurrencies are mainstream assets that are electronically traded, similar t
 
 This research paper examines the following questions as it pertains to cryptocurrencies:
 
-Can the technical analysis method of looking at the relation of bitcoin prices to a moving average be predictive of future price movements? 
+** Can the technical analysis method of looking at the relation of bitcoin prices to a moving average be predictive of future price movements? **
 
 We explore the method of analyzing moving averages used by technical analysts to make recommendations for stock price movements. In doing this, technical analysts search for momentum in price movement caused by the disposition effect, which according to Bodie is defined as “the tendency of investors to hold on to losing investments” (Bodie 384). In order to take advantage of this pattern, the investor must sell their holdings once the signal of the momentum of falling prices is determined. Prices would then continue falling further until they bottom out and head back up again. At which point, the investor will watch for the signal of the rising momentum of stock prices. Once this signal is determined, that will be the investor’s chance to buy the stock and ride the prices up. Through this strategy, the investor can cut losses when prices are falling and buy stocks cheaper when prices are increasing further, which will result in profits for the investor if all goes according to plan.
 
