@@ -1,0 +1,131 @@
+---
+title: "Examining predictive pricing indicators for cryptocurrency assets"
+author: "Tiffany Valdecantos, Terrill Toe, Adetayo Adegoke"
+date: "`r format(Sys.Date())`"
+csl: vancouver.csl
+bibliography: references.bib
+font-size: 11pt
+link-citations: true
+output: 
+  pdf_document:
+    toc: FALSE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE}
+suppressMessages(library(readr))
+suppressMessages(library(caret))
+suppressMessages(library(UsingR))
+suppressMessages(library(quantmod))
+suppressMessages(library(olsrr))
+```
+
+# Research Question and Motivation
+
+The motivation behind this study is the potential for monetary gain. If this study unveils a method to predict future movements in Bitcoin prices, then there is an opportunity to make financial gains by investing or selling Bitcoin at the right time.
+
+Is the technical analysis method of comparing current Bitcoin prices relative to a moving average effective in determining the future decrease of Bitcoin prices?
+
+According to the US government's Internal Revenue Service, a virtual currency is a digital representation of value, other than a representation of the U.S. dollar or a foreign currency ("real currency"), that functions as a unit of account, a store of value, and a medium of exchange. The agency also defines cryptocurrencies as a type of virtual currency that uses cryptography to secure transactions that are digitally recorded on a distributed ledger, such as a blockchain @CryptoDefIrs.
+
+Cryptocurrencies are mainstream assets that are electronically traded, similar to stocks and other equity types. There are many different cryptocurrencies, with several more being introduced to the public every few months for the opportunity to make transactions based on these assets. There is value to examining factors that drive cryptocurrency asset prices, since the market size of these currencies is currently over 1 trillion USD in traditional fiat USD, and is projected to grow to over 32 trillion USD by 2027 @CryptoMarketSizeYahoo. Because of their growing market size, cryptocurrencies have a significant influence on the global economy, and understanding cryptocurrency asset class pricing predictors can inform governments, businesses and retail investors.
+
+# Hypothesis
+
+This research paper examines the following questions as it pertains to cryptocurrencies:
+
+Can the technical analysis method of looking at the relation of bitcoin prices to a moving average be predictive of future price movements? 
+
+We explore the method of analyzing moving averages used by technical analysts to make recommendations for stock price movements. In doing this, technical analysts search for momentum in price movement caused by the disposition effect, which according to Bodie is defined as “the tendency of investors to hold on to losing investments” (Bodie 384). In order to take advantage of this pattern, the investor must sell their holdings once the signal of the momentum of falling prices is determined. Prices would then continue falling further until they bottom out and head back up again. At which point, the investor will watch for the signal of the rising momentum of stock prices. Once this signal is determined, that will be the investor’s chance to buy the stock and ride the prices up. Through this strategy, the investor can cut losses when prices are falling and buy stocks cheaper when prices are increasing further, which will result in profits for the investor if all goes according to plan.
+
+Our hypothesis is that a similar method of using moving averages to predict future movements in stock prices can be used to predict future movements in Bitcoin prices. Research into cryptocurrency is still an emerging field which has not been extensively studied like traditional asset classes so there may be unseen opportunities here. What’s more, we suspect that the cryptocurrency market has a larger share of retail investors as opposed to institutional investors compared to the traditional stock market. Retail investors do not have the same sophisticated tools that institutional investors do so they may be more predisposed to the disposition effect.
+
+
+
+# Data Engineering & Visualization
+Data for this experiment was collected from the following sources:
+
+(1) Cryptocurrency Historical Prices @CryptoPrices
+(2) US Unemployment Rate @USUnempRate 
+(3) US debt	@USDebt
+(4) Unemployment rate	https://fred.stlouisfed.org/series/UNRATE
+(5) US interest rate	https://fred.stlouisfed.org/series/FEDFUNDS
+(6) S&P 500	https://finance.yahoo.com/quote/%5EGSPC/history?period1=1488153600&period2=1645920000&interval=1d&filter=history&frequency=1d&includeAdjustedClose=true
+
+Three different moving averages are calculated for this project: the 10 days, 20 days, and 50 days. The below chart shows the historical movement in Bitcoin prices compared to the 50-day moving average:
+
+The technical analysis method of using moving averages says that when current prices move from above to below the moving average line, this is a sign that future bitcoin prices will head lower and the investor would be advised to sell their holdings. Conversely, if prices head from below to above the moving average line, this is a buy signal.
+
+
+```{r,eval=TRUE}
+
+# # load data set for bitcoin (btc) cryptocurrency
+# btc_data <- read.csv("bitcoin2.csv") # load bitcoin data
+# str(btc_data)
+# set.seed(25)
+# 
+# # create btc test and training data sets
+# btc_ind <- createDataPartition(btc_data$Close, p = 0.6, list = F)
+# btc_training <- btc_data[btc_ind,]
+# btc_testing <- btc_data[-btc_ind,]
+# 
+# # create linear regression models based on all variables
+# btc_cmplx_model <- lm(Open ~ ., data = btc_training)
+# summary(btc_cmplx_model)
+# 
+# # simplify the linear regression model
+# all <- ols_step_all_possible(btc_cmplx_model)
+# stepAIC(btc_cmplx_model, trace = F)
+# btc_optimized_model <- lm(formula = Open ~ X.High + Low + Close + PriceChangePercent + CloseOpen + BuySellOpen, data = btc_training)
+# summary(btc_optimized_model)
+# 
+# # compare the complex and simplified models
+# anova(btc_optimized_model, btc_cmplx_model)
+# 
+# pairs.panels(btc_data)
+
+# we reject the null hypothesis (H0: Bx() = B4 = 0) at the 5% level of significance.
+
+# shapiro.test(btc_data$PriceChange) # Testing Closing Price Normality
+
+```
+
+# Main
+
+## Methodology
+
+### Initial Exploration
+
+#### Assumptions
+
+The Covid-19 pandemic was a global event that greatly impacted the cryptocurrency market. The data used for this study undoubtedly shows the impact of this event; however, our assumption in using historical data to make predictions is that similar patterns in history are likely to reoccur in the future. Our assumption in using this data is that the underlying patterns, whether or not they have been impacted by the pandemic, will still be predictive.
+
+Additionally, since logistic regression is used for this analysis, we assume that there is a linear relationship between the predictors and the response variables and that errors are independent normal random variables with mean zero and constant variance.
+
+
+#### Removing Outliers
+
+#### Results and Conclusions
+Below is our final model for this analysis:
+
+This model shows that the below indicator using the 50-day moving average is significant at the 95% confidence-level for the “0” level with an AIC of 398.64.
+
+The sustained below indicator variable for the 50-day moving average also proved to be significant at the 95% confidence-level for the “0” level; however it has a higher p-value and marginally higher AIC of 398.99. This was therefore not selected to be our final model.
+
+# Challenges and Limitations
+
+# Further Discussion and Research
+
+Would other moving averages besides the 10, 20 and 50 day averages be more effective?
+
+Will other options for the sustained below indicator be more predictive than 5 days?
+
+Can this analysis be modified to look at hourly or minute by minute data as opposed to daily?
+
+
+Increasing the data set time range. Examining more cryptocurrency coins for cross currency trends that are universal. Impact of taxes on predictors in the future. The time period being analyzed included the COVID-19 pandemic which is a rare event not expected to reoccur in the future. Further analysis is needed to determine the impact this time period has had on our results and if these results will still hold excluding this time period.
+
+# References
