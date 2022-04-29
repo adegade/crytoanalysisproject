@@ -18,44 +18,53 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r, echo = FALSE}
+# install packages
+suppressMessages(library(corrplot))                 # Install reshape2 package
+suppressMessages(library("reshape2"))
 suppressMessages(library(readr))
 suppressMessages(library(caret))
 suppressMessages(library(UsingR))
 suppressMessages(library(quantmod))
-suppressMessages(library(olsrr))
+suppressMessages(library(ggplot2))
+suppressMessages(library(dplyr))
+suppressMessages(library(tseries))
+suppressMessages(library(gridExtra))
+suppressMessages(library(GGally))
+suppressMessages(library(corrplot))
+suppressMessages(library(pROC))
+suppressMessages(library(MLmetrics))
+
+# Source our R script with functions
+# source("src/quant_funcs.R")
 ```
 
 # Research Question and Motivation
 
-According to the US government's Internal Revenue Service, a virtual currency is a digital representation of value, other than a representation of the U.S. dollar or a foreign currency ("real currency"), that functions as a unit of account, a store of value, and a medium of exchange. The agency also defines cryptocurrencies as a type of virtual currency that uses cryptography to secure transactions that are digitally recorded on a distributed ledger, such as a blockchain @CryptoDefIrs.
+According to the U.S. government's Internal Revenue Service (IRS), a virtual currency is a digital representation of value, other than a representation of the U.S. dollar or a foreign currency ("real currency"), that functions as a unit of account, a store of value, and a medium of exchange. The IRS also defines cryptocurrencies as a type of virtual currency that uses cryptography to secure digitally recorded transactions on a distributed ledger, such as a blockchain @CryptoDefIrs.
 
-Cryptocurrencies are mainstream assets that are electronically traded, similar to stocks and other equity types. There are many different cryptocurrencies, with several more being introduced to the public every few months for the opportunity to make transactions based on these assets. There is value to examining factors that drive cryptocurrency asset prices, since the market size of these currencies is currently over 1 trillion USD in traditional fiat USD, and is projected to grow to over 32 trillion USD by 2027 @CryptoMarketSizeYahoo. Because of their growing market size, cryptocurrencies have a significant influence on the global economy, and understanding cryptocurrency asset class pricing predictors can inform governments, businesses and retail investors.
+Cryptocurrencies are mainstream assets electronically traded by many investors globally, similar to stocks and other equity types. There are many different cryptocurrencies, with several more being introduced to the public every few months for the opportunity to make transactions based on these assets. There is value to examining factors that drive cryptocurrency asset prices since the market size of these currencies is currently over 1 trillion USD in traditional fiat USD and over 32 trillion USD by 2027 @CryptoMarketSizeYahoo. 
+
+Cryptocurrencies significantly influence the global economy because of their growing market size. Researchers examining cryptocurrency pricing predictors can inform government, business, and retail investors in making more efficient transactions.
 
 # Hypothesis
 
 This research paper examines the following questions as it pertains to cryptocurrencies:
 
-** Can the technical analysis method of looking at the relation of bitcoin prices to a moving average be predictive of future price movements? **
+** Can the technical analysis method of looking at the relation of bitcoin prices to a moving average predict future price movements? **
 
-We explore the method of analyzing moving averages used by technical analysts to make recommendations for stock price movements. In doing this, technical analysts search for momentum in price movement caused by the disposition effect, which according to Bodie is defined as “the tendency of investors to hold on to losing investments” (Bodie 384). In order to take advantage of this pattern, the investor must sell their holdings once the signal of the momentum of falling prices is determined. Prices would then continue falling further until they bottom out and head back up again. At which point, the investor will watch for the signal of the rising momentum of stock prices. Once this signal is determined, that will be the investor’s chance to buy the stock and ride the prices up. Through this strategy, the investor can cut losses when prices are falling and buy stocks cheaper when prices are increasing further, which will result in profits for the investor if all goes according to plan.
+We explore the method of analyzing moving averages used by technical analysts in the capital markets industry to make recommendations for stock price movements. In doing this, technical analysts search for momentum in price movement caused by the disposition effect, which Bodie defined as “the tendency of investors to hold on to losing investments” (Bodie 384). To take advantage of this pattern, the investor must sell their holdings once the signal of the momentum of falling prices is determined. Prices would then continue falling until they bottom out and head back up again. At this point, the investor will watch for the signal of the rising momentum of stock prices. Once this signal is determined, that will be the investor’s chance to buy the stock and ride the prices up. Through this strategy, the investor can cut losses when prices are falling and buy stocks cheaper when prices are increasing further, which will result in profits for the investor if all goes according to plan.
 
-Our hypothesis is that a similar method of using moving averages to predict future movements in stock prices can be used to predict future movements in Bitcoin prices. Research into cryptocurrency is still an emerging field which has not been extensively studied like traditional asset classes so there may be unseen opportunities here. What’s more, we suspect that the cryptocurrency market has a larger share of retail investors as opposed to institutional investors compared to the traditional stock market. Retail investors do not have the same sophisticated tools that institutional investors do so they may be more predisposed to the disposition effect.
-
-
+We hypothesize that investors can use a similar approach of moving averages to predict future movements in Bitcoin prices. Cryptocurrencies are emerging asset classes that researchers have not extensively studied. As such, unseen opportunities may exist. We suspect that the cryptocurrency market has a larger share of retail investors versus institutional investors relative to the traditional stock market. Retail investors do not have the same sophisticated tools that institutional investors have access to, so they may be more predisposed to the disposition effect.
 
 # Data Engineering & Visualization
-Data for this experiment was collected from the following sources:
+
+We collected data for this experiment from the following sources:
 
 (1) Cryptocurrency Historical Prices @CryptoPrices
-(2) US Unemployment Rate @USUnempRate 
-(3) US debt	@USDebt
-(4) Unemployment rate	https://fred.stlouisfed.org/series/UNRATE
-(5) US interest rate	https://fred.stlouisfed.org/series/FEDFUNDS
-(6) S&P 500	https://finance.yahoo.com/quote/%5EGSPC/history?period1=1488153600&period2=1645920000&interval=1d&filter=history&frequency=1d&includeAdjustedClose=true
 
-Three different moving averages are calculated for this project: the 10 days, 20 days, and 50 days. The below chart shows the historical movement in Bitcoin prices compared to the 50-day moving average:
+We calculated three different moving averages for this project: 10 days, 20 days, and 50 days. The chart below shows the historical movement in Bitcoin prices compared to the 50-day moving average:
 
-The technical analysis method of using moving averages says that when current prices move from above to below the moving average line, this is a sign that future bitcoin prices will head lower and the investor would be advised to sell their holdings. Conversely, if prices head from below to above the moving average line, this is a buy signal.
+An investor using the technical analysis approach of moving averages would surmise that when current asset prices move from above to below the moving average line, this is an indicator that future bitcoin prices will head lower. The investor would consider selling their holdings as a consequence of this event. Conversely, if asset prices head from below to above the moving average line, this is a buy signal to an investor.
 
 
 ```{r,eval=TRUE}
