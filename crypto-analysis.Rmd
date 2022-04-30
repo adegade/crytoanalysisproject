@@ -33,6 +33,7 @@ suppressMessages(library(GGally))
 suppressMessages(library(corrplot))
 suppressMessages(library(pROC))
 suppressMessages(library(MLmetrics))
+suppressMessages(library(xgboost))
 
 # Source our R script with functions
 # source("src/quant_funcs.R")
@@ -58,7 +59,7 @@ We hypothesize that investors can use a similar approach of moving averages to p
 
 An investor using the technical analysis approach of moving averages would surmise that when current asset prices move from above to below the moving average line, this is an indicator that future bitcoin prices will head lower. The investor would consider selling their holdings as a consequence of this event. Conversely, if asset prices head from below to above the moving average line, this is a buy signal to an investor.
 
-# Data Source, Engineering, and Visualization
+# Data Source and Engineering
 
 We collected data for this experiment from the following sources:
 
@@ -68,65 +69,105 @@ We calculated three different moving averages for this project: 10 days, 20 days
 
 
 ```{r,eval=TRUE}
-# The chart below shows the historical movement in Bitcoin prices compared to the 50-day moving average:
+
+# The chart below shows the historical movement in Bitcoin prices compared to 
+# the 50-day moving average
+
+# Get data for Bitcoin (btc)
 btc_data <- read.csv("coin_Bitcoin.csv")
 str(btc_data)
-```
-Data munging steps to do:
-1. convert Date to Date type
-2. Transform Volume and Marketcap so it is within the scale of the remaining data
-3. Check for any null values within the original data
-```{r}
-#Convert the Date column to Date and the 
-btc_data$Date <- as.Date(btc_data$Date, format = "%Y-%m-%d")
-#Transform the Volume and Marketcap columns to scale the data
-btc_data$Marketcap <- btc_data$Marketcap / 100000000
+
+# Convert the Date column to Date format
+btc_data$Date <- as.Date(btc_data$Date, format = "%Y-%m-%d") 
+
+# Transform the Volume and Marketcap columns to scale the data
+btc_data$Marketcap <- btc_data$Marketcap / 100000000 
 btc_data$Volume <- btc_data$Volume / 100000000
-# Feature engineering of some new columns
-# Sort the data by date in decendeing order
+
+# Sort the data by date in descending order
 btc_data <- btc_data[order(btc_data$Date),]
+
 #Check for any null values in the data set
 btc_data %>% summarise(across(everything(), ~ sum(is.na(.))))
-```
-Now let's do some feature engineering by adding some columns that would give us future and past results.
-```{r}
+
+# Now let's do some feature engineering by adding some columns that would give 
+# us future and past results.
+# Feature Definitions:
+# Bit_returns -> the simple daily returns using the closing price at time t and t-1
+# Bit_log_returns - the daily log using the closing price
+# Bit_days_range - the range in price for that given date, highest price - the lowest price of that day.
+# Bit_log_wtd_ret - the week to date returns using the closing price at time t and t-7
+# Bit_log_biwtd_ret - the bi weekly to date returns using the closing price at time t and t-14
+# Bit_log_mtd_ret - the month to date returns using the closing price at time t and t-30
+# ema_log_ret_7 - the exponential moving average of the week to date returns. Weighted average using values in range of time t and t-7
+# ema_log_ret_14 - the exponential moving average of the bi weekly to date returns. Weighted average using values in range of time t and t-14
+# ema_log_ret_30 - the exponential moving average of the month to date returns. Weighted average using values in range of time t and t-30
+# moving_avg_10 - the 10 moving average of the closing price
+# moving_avg_20 - the 20 moving average of the closing price
+# moving_avg_50 - the 50 moving average of the closing price
+# moving_avg_50_diff - the difference between the 50 day moving average at t and t-1
+# moving_avg_50_diff_7 - the difference between the 50 day moving average at t and t-7
+# Bit_rsi_3 - Momentum indicator using 30 days of prior prices at time t
+# Bit_rsi_60 - Momentum indicator using 60 days of prior prices at time t
+# Bit_rsi_90 - Momentum indicator using 90 days of prior prices at time t
+
 # Get the daily log returns
 btc_data$Bit_log_returns <- c(NA, diff(log(btc_data$Close), lag=1))
 btc_data$Bit_log_returns <- round(btc_data$Bit_log_returns, 5)
+
 # Get the daily returns
 n <- nrow(btc_data)
 prices <- btc_data$Close
 returns<- ((prices[2:n] - prices[1:(n-1)])/prices[1:(n-1)])
 btc_data$Bit_returns <- c(NA, returns)
 btc_data$Bit_returns <- round(btc_data$Bit_returns, 5)
+
 # Get the daily range
 btc_data$Bit_days_range <- btc_data$High - btc_data$Low
+
 # Get the week(7 days) to date returns
 btc_data$Bit_log_wtd_ret <- c(rep(NA,7), diff(log(btc_data$Close), lag=7))
-# Get the week(7 days) to date returns - the past 7 days leading up to the current records time period
+
+# Get the week(7 days) to date returns - the past 7 days leading up to the 
+# current records time period
 btc_data$Bit_log_biwtd_ret <- c(rep(NA,14), diff(log(btc_data$Close), lag=14))
+
 # Get the Bi-weekly(14 days) to date returns
 btc_data$Bit_log_mtd_ret <- c(rep(NA,30), diff(log(btc_data$Close), lag=30))
-#Get the 7 day exponential moving average of daily returns
-btc_data$ema_log_ret_7 <- EMA(btc_data$Bit_log_returns, 7)
-#Get the 14 day exponential moving average of daily returns
-btc_data$ema_log_ret_14 <- EMA(btc_data$Bit_log_returns, 14)
-#Get the 30 day exponential moving average of daily returns
-btc_data$ema_log_ret_30 <- EMA(btc_data$Bit_log_returns, 30)
-#Create variables for moving averages
-btc_data <- mutate(btc_data, moving_avg_10 = rollmean(Close, 10, fill = 0, align = "right"))
-btc_data <- mutate(btc_data, moving_avg_20 = rollmean(Close, 20, fill = 0, align = "right"))
-btc_data <- mutate(btc_data, moving_avg_50 = rollmean(Close, 50, fill = 0, align = "right"))
-# Get the RSI indicator, for a monthly period, 60 day period and a 90 day period
-btc_data$Bit_rsi_3 <- RSI(btc_data$Close, n=30, maType = "EMA")
-btc_data$Bit_rsi_60 <- RSI(btc_data$Close, n=60, maType = "EMA")
-btc_data$Bit_rsi_90 <- RSI(btc_data$Close, n=90, maType = "EMA")
 
+# Get the 7 day exponential moving average of daily returns
+btc_data$ema_log_ret_7 <- EMA(btc_data$Bit_log_returns, 7)
+
+# Get the 14 day exponential moving average of daily returns
+btc_data$ema_log_ret_14 <- EMA(btc_data$Bit_log_returns, 14)
+
+# Get the 30 day exponential moving average of daily returns
+btc_data$ema_log_ret_30 <- EMA(btc_data$Bit_log_returns, 30)
+
+# Create variables for moving averages
+btc_data <- mutate(btc_data, moving_avg_10 = 
+                     rollmean(Close, 10, fill = 0, align = "right"))
+btc_data <- mutate(btc_data, moving_avg_20 = 
+                     rollmean(Close, 20, fill = 0, align = "right"))
+btc_data <- mutate(btc_data, moving_avg_50 = 
+                     rollmean(Close, 50, fill = 0, align = "right"))
+
+# Get the difference between the moving averages
+btc_data$moving_avg_50_diff <- c(rep(NA, 2), diff(btc_data$moving_avg_50, 
+                                                  lag = 1, differences = 2))
+btc_data$moving_avg_50_diff_7 <- c(rep(NA, 14), diff(btc_data$moving_avg_50, 
+                                                     lag = 7, differences = 2))
+
+# Get the RSI indicator, for a monthly period, 60 day period and a 90 day period
+btc_data$Bit_rsi_3 <- RSI(btc_data$Close, n=30, maType = "EMA") / 100
+btc_data$Bit_rsi_60 <- RSI(btc_data$Close, n=60, maType = "EMA") / 100
+btc_data$Bit_rsi_90 <- RSI(btc_data$Close, n=90, maType = "EMA") / 100
 summary(btc_data)
 ```
 
-Because we are dealing with time series data, we will run the Augmented Dickey fuller test on our continuous variables to test for stationarity.
-```{r}
+Because we are dealing with time series data, we will run the Augmented Dickey Fuller (ADF) test on our continuous variables to test for stationarity.A stationary time series is one whose properties do not depend on the time at which the series is observed.@Stationarity
+
+```{r,eval=TRUE}
 
 print("################## Testing for the Close ##################")
 adf.test(btc_data$Close)
@@ -182,17 +223,20 @@ adf.test(btc_data$moving_avg_20[21:n])
 print("################## Testing for 50 day moving average ##################")
 adf.test(btc_data$moving_avg_50[21:n])
 
+print("################## Testing for the 1 Day Difference between 50 day moving average ##################")
+adf.test(btc_data$moving_avg_50_diff[100:n])
+
+print("################## Testing for the 7 Day Difference between 50 day moving average ##################")
+adf.test(btc_data$moving_avg_50_diff_7[110:n])
+
 ```
 
-From the Dickey-Fuller Test we can see that from the data Closing Price, and Market Cap have unit root which means that they are not non-stationry. Good notes to have when comprising our model. Now that we have an understanding of what is stationry and non-stationary let's partition the data into training and testing out of time samples.
+From the ADF Test we can see that from the features Closing Price, and Market Cap have unit roots which means that they are not non-stationary. We accounted for the non-stationary features in statistical models for time series data sets by creating features based on calculating the differences between consecutive observations in the data. Now that we have an understanding of what is stationary and non-stationary and we have accounted for non-stationary features, let's partition the data into training and testing out of time samples.
 
 Before we do so let's do some more engineering and engineer our potential target variables. Create dummy variables on when to buy and sell. First let's get a representation of the data to start.
 
 
-```{r}
-#names(btc_data)
-#time_cols <- c("Date", "Bit_log_returns", "Bit_returns", "Bit_log_wtd_ret", "Bit_log_biwtd_ret",
-               #"Bit_log_mtd_ret", "ema_log_ret_7", "ema_log_ret_14","ema_log_ret_30")
+```{r,eval=TRUE}
 
 time_cols <- c("Date", "Bit_log_wtd_ret", "Bit_log_biwtd_ret",
                "Bit_log_mtd_ret")
@@ -221,7 +265,7 @@ time_line2<- ggplot(btc_time,
                        alpha=0.25)) +
               geom_line() + geom_hline(aes(yintercept = 0, colour = "Black")) + ggtitle("EMA 7, 14, and 30 days of Daily Log Returns")
 
-# plot the simple returns as a density plot, box plot, and qqplot
+# Plot the simple returns as a density plot, box plot, and qqplot
 wtd_dens <-  ggplot(btc_data, aes(x=Bit_log_wtd_ret)) +
               geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
               geom_density() + ggtitle("WTD Returns")
@@ -230,7 +274,7 @@ wtd_qq <- ggplot(btc_data, aes(sample = Bit_log_wtd_ret)) + stat_qq() + stat_qq_
 
 wtd_box <- ggplot(btc_data, aes(y = Bit_log_wtd_ret)) + geom_boxplot(width = 0.5) + ggtitle("WTD Returns")
 
-# plot the simple returns as a density plot, box plot, and qqplot
+# Plot the simple returns as a density plot, box plot, and qqplot
 biwtd_dens <-  ggplot(btc_data, aes(x=Bit_log_biwtd_ret)) +
               geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
               geom_density() + ggtitle("Bi-WTD Returns")
@@ -239,7 +283,7 @@ biwtd_qq <- ggplot(btc_data, aes(sample = Bit_log_biwtd_ret)) + stat_qq() + stat
 
 biwtd_box <- ggplot(btc_data, aes(y = Bit_log_biwtd_ret)) + geom_boxplot(width = 0.5) + ggtitle("Bi-WTD Returns")
 
-# plot the simple returns as a density plot, box plot, and qqplot
+# Plot the simple returns as a density plot, box plot, and qqplot
 mtd_dens <-  ggplot(btc_data, aes(x=Bit_log_mtd_ret)) +
               geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
               geom_density() + ggtitle("MTD Returns")
@@ -248,11 +292,55 @@ mtd_qq <- ggplot(btc_data, aes(sample = Bit_log_mtd_ret)) + stat_qq() + stat_qq_
 
 mtd_box <- ggplot(btc_data, aes(y = Bit_log_mtd_ret)) + geom_boxplot(width = 0.5) + ggtitle("MTD Returns")
 
+# Plot the Moving average difference returns as a density plot, box plot, and qqplot
+ma_diff_dens <-  ggplot(btc_data, aes(x=moving_avg_50_diff)) +
+              geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
+              geom_density() + ggtitle("50 Day MA 1 day differnence")
+
+ma_diff_qq <- ggplot(btc_data, aes(sample = moving_avg_50_diff)) + stat_qq() + stat_qq_line() + ggtitle("50 Day MA 1 day differnence")
+
+ma_diff_box <- ggplot(btc_data, aes(y = moving_avg_50_diff)) + geom_boxplot(width = 0.5) + ggtitle("50 Day MA 1 day differnence")
+
+# Plot the Moving Average as a density plot, box plot, and qqplot
+ma7_diff_dens <-  ggplot(btc_data, aes(x=moving_avg_50_diff_7)) +
+              geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
+              geom_density() + ggtitle("50 Day MA 7 days differnence")
+
+ma7_diff_qq <- ggplot(btc_data, aes(sample = moving_avg_50_diff_7)) + stat_qq() + stat_qq_line() + ggtitle("50 Day MA 7 days differnence")
+
+ma7_diff_box <- ggplot(btc_data, aes(y = moving_avg_50_diff_7)) + geom_boxplot(width = 0.5) + ggtitle("50 Day MA 7 days differnence")
+
+# Create time series chart of the moving averages
+time_cols <- c("Date", "moving_avg_50_diff_7", "moving_avg_50_diff")
+btc_time <- btc_data[, (colnames(btc_data) %in% time_cols)]
+btc_time <- melt(btc_time, id.vars = "Date")
+btc_time <- btc_time[btc_time$Date > "2014-01-01" &    # Extract data frame subset
+                   btc_time$Date < "2015-01-01", ]
+
+time_line_ma<- ggplot(btc_time,
+                   aes(x = Date,
+                       y = value,
+                       col = variable,
+                       alpha=0.25)) +
+              geom_line() + ggtitle("Moving Averages difference from Jan 2014 - Jan 2015")
+
 grid.arrange(time_line, time_line2, ncol = 1, nrow = 2)
 grid.arrange(wtd_dens, wtd_qq, wtd_box, biwtd_dens, biwtd_qq, biwtd_box, mtd_dens, mtd_qq, mtd_box, ncol = 3, nrow = 3)
+grid.arrange(ma_diff_dens, ma_diff_qq, ma_diff_box, ma7_diff_dens, ma7_diff_qq, ma7_diff_box, ncol = 3, nrow = 2)
+grid.arrange(time_line_ma, ncol = 1, nrow = 1)
+
 ```
+
 Let's create a another ema set of features, this time using a bi-weekly cadence.
-```{r}
+
+```{r,eval=TRUE}
+
+# Additional Features:
+# 
+# ema_log_biret_7 - the exponential moving average using teh bi weekly returns. The time window for the value is at time t and t-7
+# ema_log_biret_14 - the exponential moving average using teh bi weekly returns. The time window for the value is at time t and t-14
+# ema_log_biret_30 - the exponential moving average using teh bi weekly returns. The time window for the value is at time t and t-30
+
 #Get the 7 day exponential moving average of daily returns
 btc_data$ema_log_biret_7 <- EMA(btc_data$Bit_log_biwtd_ret, 7)
 #Get the 14 day exponential moving average of daily returns
@@ -277,7 +365,6 @@ time_cols <- c("Date", "Close")
 btc_time <- btc_data[, (colnames(btc_data) %in% time_cols)]
 btc_time <- btc_time[btc_time$Date > "2014-01-01" &    # Extract data frame subset
                    btc_time$Date < "2015-01-01", ]
-
 time_line6<- ggplot(btc_time,
                    aes(x = Date,
                        y = Close,
@@ -289,31 +376,31 @@ time_cols <- c("Date", "moving_avg_50")
 btc_time <- btc_data[, (colnames(btc_data) %in% time_cols)]
 btc_time <- btc_time[btc_time$Date > "2014-01-01" &    # Extract data frame subset
                    btc_time$Date < "2015-01-01", ]
-
 time_line50<- ggplot(btc_time,
                    aes(x = Date,
                        y = moving_avg_50,
                        alpha=0.25)) +
               geom_line() + ggtitle("Prices Jan 2014 - Jan 2015")
-
-
 ma_dens <-  ggplot(btc_data, aes(x=moving_avg_50)) +
               geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
               geom_density() + ggtitle("MTD Returns")
-
 ma_qq <- ggplot(btc_data, aes(sample = moving_avg_50)) + stat_qq() + stat_qq_line() + ggtitle("MTD Returns")
-
 ma_box <- ggplot(btc_data, aes(y = moving_avg_50)) + geom_boxplot(width = 0.5) + ggtitle("MTD Returns")
 
 grid.arrange(time_line2, time_line3, time_line6, time_line50, ncol = 1, nrow = 4)
 grid.arrange(ma_dens, ma_qq, ma_box, ncol = 3, nrow = 1)
+
 ```
-Get the ema for monthly returns, plot it against the ema for Bi wtd and clossing prices of Bitcoin
-```{r}
+Get the EMA for monthly returns, plot it against the ema for Bi wtd and closing prices of Bitcoin
+
+```{r,eval=TRUE}
+
 #Get the 7 day exponential moving average of daily returns
 btc_data$ema_log_mtdret_7 <- EMA(btc_data$Bit_log_mtd_ret, 7)
+
 #Get the 14 day exponential moving average of daily returns
 btc_data$ema_log_mtdret_14 <- EMA(btc_data$Bit_log_mtd_ret, 14)
+
 #Get the 30 day exponential moving average of daily returns
 btc_data$ema_log_mtdret_30 <- EMA(btc_data$Bit_log_mtd_ret, 30)
 
@@ -335,39 +422,42 @@ btc_time <- btc_data[, (colnames(btc_data) %in% time_cols)]
 btc_time <- btc_time[btc_time$Date > "2014-01-01" &    # Extract data frame subset
                    btc_time$Date < "2015-01-01", ]
 
-
 grid.arrange(time_line3, time_line5, time_line6, ncol = 1, nrow = 3)
+
 ```
+
 Get the graphs of the EMA values that were recently created.
-```{r}
+
+```{r,eval=TRUE}
+
 # plot the simple returns as a density plot, box plot, and qqplot
 ema_mtd_dens <-  ggplot(btc_data, aes(x=ema_log_mtdret_30)) +
               geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
               geom_density() + ggtitle("EMA 30 MTD Returns")
-
 ema_mtd_qq <- ggplot(btc_data, aes(sample = ema_log_mtdret_30)) + stat_qq() + stat_qq_line() + ggtitle("EMA 30 MTD Returns")
-
 ema_mtd_box <- ggplot(btc_data, aes(y = ema_log_mtdret_30)) + geom_boxplot(width = 0.5) + ggtitle("EMA 30 MTD Returns")
 
 # plot the simple returns as a density plot, box plot, and qqplot
 ema_biwtd_dens <-  ggplot(btc_data, aes(x=ema_log_biret_30)) +
               geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
               geom_density() + ggtitle("EMA BI-WTD Returns")
-
 ema_biwtd_qq <- ggplot(btc_data, aes(sample = ema_log_biret_30)) + stat_qq() + stat_qq_line() + ggtitle("EMA 30 BI-WTD Returns")
-
 ema_biwtd_box <- ggplot(btc_data, aes(y = ema_log_biret_30)) + geom_boxplot(width = 0.5) + ggtitle("EMA 30 BI-WTD Returns")
 
 grid.arrange(ema_mtd_dens, ema_mtd_qq, ema_mtd_box, ema_biwtd_dens, ema_biwtd_qq, ema_biwtd_box, ncol = 3, nrow = 2)
+
 ```
-Because the EMA of returns shows to be closer to normal, we will use this as our means of labeling for indicators.
-Create an indicator column based on the following threshhold. if average returns are greater than 20% mark it as a buy, if average returns are less than -15% trigger sell. Everything else will be labeled as 0 which will be the noise of regular up and down periods.
-```{r}
+
+Shift the week to date, bi week to date, and month to date up the number of units it used to calclute the metric. (i.e week date used t and t-7 to calculate. Shift the rows up replacing the previous null values). This will now give the future returns at time t.
+
+```{r,eval=TRUE}
+
 #Shift the columns back n days so current features align with the labeled future values
 n <- nrow(btc_data) 
 btc_data$Bit_log_wtd_ret_lag <- c(btc_data$Bit_log_wtd_ret[8:n], rep(NA,7))
 btc_data$Bit_log_biwtd_ret_lag <- c(btc_data$Bit_log_biwtd_ret[15:n], rep(NA,14))
 btc_data$Bit_log_mtd_ret_lag <- c(btc_data$Bit_log_mtd_ret[31:n], rep(NA,30))
+
 #Create the indicators on when to buy when to sell and when to hold
 btc_data$buy_sell_ind_wtd <- ifelse(btc_data$Bit_log_wtd_ret_lag >=  0.2, 1, ifelse(btc_data$Bit_log_wtd_ret_lag <=  -0.15, -1, 0))
 btc_data$buy_sell_ind_biwtd <- ifelse(btc_data$Bit_log_biwtd_ret_lag >=  0.2, 1, ifelse(btc_data$Bit_log_biwtd_ret_lag <=  -0.15, -1, 0))
@@ -377,18 +467,23 @@ btc_data$buy_sell_ind_mtd <- ifelse(btc_data$Bit_log_mtd_ret_lag >=  0.2, 1, ife
 btc_data$buy_sell_ind_wtd <- as.factor(btc_data$buy_sell_ind_wtd)
 btc_data$buy_sell_ind_biwtd <- as.factor(btc_data$buy_sell_ind_biwtd)
 btc_data$buy_sell_ind_mtd <- as.factor(btc_data$buy_sell_ind_mtd)
-# remove the rows with null values at the beginning and end of the dataframe.
+
+# remove the rows with null values at the beginning and end of the data frame.
 btc <- btc_data[complete.cases(btc_data),]
+
 #Partition the data into training and testing sets.
 train_indx <- round(0.7 * nrow(btc))
 btc_train <- btc[1:train_indx,]
 test_indx <- train_indx + 1
 n_btc <- nrow(btc)
 btc_test <- btc[test_indx:n_btc,]
+
 ```
 
 Look at the relationships between EMA Values and their expected future returns
-```{r}
+
+```{r,eval=TRUE}
+
 day <- ggplot(btc_train, aes(x=Bit_log_mtd_ret, y=Bit_log_wtd_ret_lag, color=buy_sell_ind_wtd)) + 
         geom_point(alpha=0.5, shape=18) + geom_vline(aes(xintercept = 0)) + geom_hline(aes(yintercept = 0))
 
@@ -403,9 +498,13 @@ grid.arrange(day, week, month, ncol = 1, nrow = 3)
 names(btc_train)
 cor_feat <- cor(btc_train[, 5:34])
 corrplot(cor_feat, method="color", addCoef.col = 0.5, number.cex = 0.5, tl.cex = 0.5)
+
 ```
+
 plot the buy and sell points on a chart of prices.
-```{r}
+
+```{r,eval=TRUE}
+
 time_cols <- c("Date", "Close", "buy_sell_ind_mtd")
 btc_time <- btc_data[, (colnames(btc_data) %in% time_cols)]
 btc_time <- btc_time[btc_time$Date > "2013-06-01" &    # Extract data frame subset
@@ -414,8 +513,7 @@ btc_points <- btc_time[btc_time$buy_sell_ind_mtd == -1, ]
 plot(x = btc_time$Date,
     y = btc_time$Close, main = "Sell Indicators between Jun 2013 - Jan 2015")
 points(x = btc_points$Date, y=btc_points$Close, col="red")
-```
-```{r}
+
 time_cols <- c("Date", "Close", "buy_sell_ind_mtd")
 btc_time <- btc_data[, (colnames(btc_data) %in% time_cols)]
 btc_time <- btc_time[btc_time$Date > "2013-06-01" &    # Extract data frame subset
@@ -424,14 +522,26 @@ btc_points <- btc_time[btc_time$buy_sell_ind_mtd == 1, ]
 plot(x = btc_time$Date,
     y = btc_time$Close, main = "Buy Indicators between Jun 2013 - Jan 2015")
 points(x = btc_points$Date, y=btc_points$Close, col="green")
+
 ```
+
 After some research we will use the xgboost algorithim to classiy when to buy and when to sell based where we think positive returns will be a month out from the point in time.
+
+XGBoost can be used for either regression or classification problems. In our case we engineered our target variable with 0s and 1s, making it a classification problem. We will see if using xgboost as classification model would be able to spot good buy moments in the data.
+
+Xgboost in time series: https://machinelearningmastery.com/xgboost-for-time-series-forecasting/
+
+Why model using log returns: https://medium.datadriveninvestor.com/why-we-use-log-returns-for-stock-returns-820cec4510ba
+
 # Main
-```{r}
+
+```{r,eval=TRUE}
+
 str(btc_train)
 rm_cols <- c("SNo", "Name", "Symbol", "High", "Low", "Open", "Close", "Marketcap", "buy_sell_ind_wtd", "buy_sell_ind_biwtd",
              "Bit_log_wtd_ret_lag", "Bit_log_biwtd_ret_lag", "Bit_log_mtd_ret_lag", "buy_sell_ind_mtd", "moving_avg_10",
              "moving_avg_20")
+
 #Predict on when is a good time to buy
 btc_train$buy_indicator <- ifelse(btc_train$buy_sell_ind_mtd == 1, 1, 0)
 btc_test$buy_indicator <- ifelse(btc_test$buy_sell_ind_mtd == 1, 1, 0)
@@ -439,7 +549,6 @@ btc_train <- btc_train[, !(colnames(btc_train) %in% rm_cols)]
 btc_test <- btc_test[, !(colnames(btc_test) %in% rm_cols)]
 
 # Convert the date into integers of month day and year, each with its own column to preserve the temporal aspect of the data
-
 btc_train <- btc_train %>%
     dplyr::mutate(., 
                   months = lubridate::month(Date),
@@ -451,41 +560,53 @@ btc_test <- btc_test %>%
                   months = lubridate::month(Date),
                   years = lubridate::year(Date),
                   days = lubridate::day(Date))
+
 #Convert the days column to numeric
 btc_test$days <- as.numeric(btc_test$days)
 btc_train$days <- as.numeric(btc_train$days)
+btc_test$months <- as.numeric(btc_test$months)
+btc_train$months <- as.numeric(btc_train$months)
+btc_test$year <- as.numeric(btc_test$years)
+btc_train$years <- as.numeric(btc_train$years)
+
 #create the matrix values for the xgboost
 x_train <- btc_train %>%
                     dplyr::select(months, days, years, Volume, Bit_log_returns, Bit_returns, Bit_days_range, Bit_log_wtd_ret, Bit_log_biwtd_ret,
                     Bit_log_mtd_ret, ema_log_ret_7, ema_log_ret_14, ema_log_ret_30, Bit_rsi_3, Bit_rsi_60, Bit_rsi_90,
-                    ema_log_biret_7, ema_log_biret_14, ema_log_biret_30, ema_log_mtdret_7, ema_log_mtdret_14, ema_log_mtdret_30, moving_avg_50) %>%
+                    ema_log_biret_7, ema_log_biret_14, ema_log_biret_30, ema_log_mtdret_7, ema_log_mtdret_14, ema_log_mtdret_30, moving_avg_50,
+                    moving_avg_50_diff, moving_avg_50_diff_7) %>%
                   as.matrix()
 
 x_test <- btc_test %>% 
                   dplyr::select(months, days, years, Volume, Bit_log_returns, Bit_returns, Bit_days_range, Bit_log_wtd_ret, Bit_log_biwtd_ret,
                   Bit_log_mtd_ret, ema_log_ret_7, ema_log_ret_14, ema_log_ret_30, Bit_rsi_3, Bit_rsi_60, Bit_rsi_90,
-                  ema_log_biret_7, ema_log_biret_14, ema_log_biret_30, ema_log_mtdret_7, ema_log_mtdret_14, ema_log_mtdret_30, moving_avg_50) %>%
+                  ema_log_biret_7, ema_log_biret_14, ema_log_biret_30, ema_log_mtdret_7, ema_log_mtdret_14, ema_log_mtdret_30, moving_avg_50,
+                  moving_avg_50_diff, moving_avg_50_diff_7) %>%
                 as.matrix()
 y_train <- as.factor(btc_train$buy_indicator)
 y_test <- as.factor(btc_test$buy_indicator)
+
 ```
+
 link:
 https://www.r-bloggers.com/2019/09/time-series-forecasting-with-random-forest/
-```{r}
+
+```{r,eval=TRUE}
+
 #nrow(btc_train)
 set.seed(123)
 xgb_trcontrol <- caret::trainControl(
    method = "timeslice",
-   initialWindow = 150,
-   horizon = 10,
+   initialWindow = 200,
+   horizon = 70,
    fixedWindow = FALSE, 
    allowParallel = FALSE
 )
  
 xgb_grid <- base::expand.grid(
    list(
-    nrounds = c(100, 200),
-    max_depth = c(10, 15, 20), # maximum depth of a tree
+    nrounds = c(150, 250),
+    max_depth = c(20, 50, 100), # maximum depth of a tree
     colsample_bytree = seq(0.5), # subsample ratio of columns when construction each tree
     eta = 0.1, # learning rate
     gamma = 0, # minimum loss reduction
@@ -494,14 +615,14 @@ xgb_grid <- base::expand.grid(
 ))
 ```
 ```{r, warning=FALSE}
-xgb_model <- suppressMessages(caret::train(
+xgb_model <- caret::train(
    x_train, y_train,
    trControl = xgb_trcontrol,
    tuneGrid = xgb_grid,
    method = "xgbTree",
    nthread = 1,
    objective = "binary:logistic"
-))
+)
 ```
 ```{r}
 xgb_model$bestTune
@@ -513,52 +634,73 @@ xgb.plot.importance(importance_matrix = importance_matrix)
 ```
 
 As we can see from the feature
+
 ## Methodology
-```{r}
+```{r,eval=TRUE}
+
 train_predicted <- xgb_model %>% predict(x_train)
-print("The accuracy score for the buy indicator is bellow:")
+print("The accuracy score for the buy indicator is below:")
 Accuracy(train_predicted, btc_train$buy_indicator)
 
-#Confussion matrix
+#Confusion matrix
 confMat1 <- ConfusionMatrix(train_predicted, btc_train$buy_indicator)
 confMat1
 
 ```
+
 With results like that our model could be over fitted.
-```{r}
+
+```{r,eval=TRUE}
+
 test_predicted <- xgb_model %>% predict(x_test)
-print("The accuracy score for the buy indicator is bellow:")
+print("The accuracy score for the buy indicator is below:")
 Accuracy(test_predicted, btc_test$buy_indicator)
 
-#Confussion matrix
+#Confusion matrix
 confMat2 <- ConfusionMatrix(test_predicted, btc_test$buy_indicator)
 confMat2
 
 roc_offer <- roc(test_predicted, as.integer(btc_test$buy_indicator))
 plot(roc_offer)
+
+btc_test$pred1 <- test_predicted
+
+time_cols <- c("Date", "Close")
+btc_sub <- btc_data[, (colnames(btc_data) %in% time_cols)]
+btc_test <- left_join(btc_test, btc_sub, by="Date")
+time_cols <- c("Date", "Close", "pred1")
+btc_time <- btc_test[, (colnames(btc_test) %in% time_cols)]
+btc_points <- btc_time[btc_time$pred1 == 1, ]
+plot(x = btc_time$Date,
+    y = btc_time$Close, main = "Buy Indicators between Jun 2013 - Jan 2015")
+points(x = btc_points$Date, y=btc_points$Close, col="green")
+
 ```
+
 As we can see our model did perfectly well at segmenting the data perfectly. However, it did poorly against the testing data. The columns that we care about most is the ratio between true positve false positives from a business standpoint. Reason being is that, those 2 counts indicate a buy order was made. From a business standpoint we would want to first ensure that a buy indicator indicates a winning buy order, being that the returns will be positive.
 
 This time lets train the model stripping some of the lesser important features, which should slim our data down. Then we will increase the window size of the testing in the cross validation step.
-```{r}
+
+```{r,eval=TRUE}
+
 #create the matrix values for the xgboost
 x_train_2 <- btc_train %>%
-                    dplyr::select(months, days, years, Bit_returns,
+                    dplyr::select(months, days, years,
                     Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
-                    ema_log_mtdret_30, moving_avg_50) %>%
+                    ema_log_mtdret_30, moving_avg_50_diff_7) %>%
                   as.matrix()
 
 x_test_2 <- btc_test %>% 
-                  dplyr::select(months, days, years, Bit_returns,
+                  dplyr::select(months, days, years,
                     Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
-                    ema_log_mtdret_30, moving_avg_50) %>%
+                    ema_log_mtdret_30, moving_avg_50_diff_7) %>%
                 as.matrix()
 
 set.seed(123)
 xgb_trcontrol_2 <- caret::trainControl(
    method = "timeslice",
-   initialWindow = 500,
-   horizon = 100,
+   initialWindow = 700,
+   horizon = 200,
    fixedWindow = FALSE, 
    allowParallel = FALSE
 )
@@ -573,11 +715,11 @@ xgb_grid_2 <- base::expand.grid(
     min_child_weight = 1,  # minimum sum of instance weight (hessian) needed ina child
     subsample = 1 # subsample ratio of the training instances
 ))
+
 ```
 
-
-
 ```{r, warning=FALSE}
+
 xgb_model_2 <- suppressMessages(caret::train(
    x_train, y_train,
    trControl = xgb_trcontrol_2,
@@ -586,7 +728,9 @@ xgb_model_2 <- suppressMessages(caret::train(
    nthread = 1,
    objective = "binary:logistic"
 ))
+
 ```
+
 get the results.
 
 ```{r}
@@ -594,27 +738,42 @@ train_predicted_2 <- xgb_model_2 %>% predict(x_train)
 print("The accuracy score for the buy indicator is bellow:")
 Accuracy(train_predicted_2, btc_train$buy_indicator)
 
-#Confussion matrix
+# Confusion matrix
 confMat1_2 <- ConfusionMatrix(train_predicted_2, btc_train$buy_indicator)
 confMat1_2
-
 
 test_predicted_2 <- xgb_model_2 %>% predict(x_test)
 print("The accuracy score for the buy indicator is bellow:")
 Accuracy(test_predicted_2, btc_test$buy_indicator)
 
-#Confussion matrix
+# Confusion matrix
 confMat2_2 <- ConfusionMatrix(test_predicted_2, btc_test$buy_indicator)
 confMat2_2
 
 ```
+
+Check the kind of trade that the algorithm predicted.
+
+```{r,eval=TRUE}
+
+time_cols <- c("Date", "Close")
+btc_sub <- btc_data[, (colnames(btc_data) %in% time_cols)]
+btc_test <- left_join(btc_test, btc_sub, by="Date")
+btc_test$pred_1 <- test_predicted_2
+time_cols <- c("Date", "Close", "pred_1")
+btc_time <- btc_test[, (colnames(btc_test) %in% time_cols)]
+btc_points <- btc_time[btc_time$pred_1 == 1, ]
+plot(x = btc_time$Date,
+    y = btc_time$Close, main = "Buy Indicators between Jun 2013 - Jan 2015")
+points(x = btc_points$Date, y=btc_points$Close, col="green")
+
 ```
 
-# Main
+```{r}
 
-## Methodology
+max(btc_test$Date)
 
-### Initial Exploration
+```
 
 #### Assumptions
 
