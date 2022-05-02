@@ -34,9 +34,11 @@ suppressMessages(library(corrplot))
 suppressMessages(library(pROC))
 suppressMessages(library(MLmetrics))
 suppressMessages(library(xgboost))
+suppressMessages(library(doParallel))
 
 # Source our R script with functions
-# source("src/quant_funcs.R")
+source("src/quant_funcs.R")
+
 ```
 
 # Research Question and Motivation
@@ -65,8 +67,30 @@ We collected data for this experiment from the following sources:
 
 (1) Cryptocurrency Historical Prices @CryptoPrices
 
-We calculated three different BTC moving day closing price averages for this project: 10 days, 20 days, and 50 days. 
+The following features were evaluated for this analysis:
 
+1. Bit_returns - the simple daily returns using the closing price at time t and t-1
+2. Bit_log_returns - the daily log returns using the closing price at time t and t-1
+3. Bit_days_range - the range in price movements for the given day defined as highest price - the lowest price of that day
+4. Bit_log_wtd_ret - the week to date returns using the closing price at time t and t-7
+5. Bit_log_biwtd_ret - the bi-weekly to date returns using the closing price at time t and t-14
+6. Bit_log_mtd_ret - the month to date returns using the closing price at time t and t-30
+7. ema_log_ret_7 - the exponential moving average of the week to date returns defined as the weighted average using values in range of time t and t-7
+8. ema_log_ret_14 - the exponential moving average of the bi-weekly to date returns defined as the weighted average using values in range of time t and t-14
+9. ema_log_ret_30 - the exponential moving average of the month to date returns defined as the weighted average using values in range of time t and t-30
+10. ema_log_biret_7 - the exponential moving average using bi-weekly returns between time t and t-7
+11. ema_log_biret_14 - the exponential moving average using bi-weekly returns between time t and t-14
+12. ema_log_biret_30 - the exponential moving average using bi-weekly returns between time t and t-30
+13. moving_avg_10 - the 10-day simple moving average of the closing price
+14. moving_avg_20 - the 20-day simple moving average of the closing price
+15. moving_avg_50 - the 50-day simple moving average of the closing price
+16. moving_avg_50_diff - the difference between the 50-day moving average at t and t-1
+17. moving_avg_50_diff_7 - the difference between the 50-day moving average at t and t-7
+18. Bit_rsi_3 - Momentum indicator using 30 days of prior prices at time t
+19. Bit_rsi_60 - Momentum indicator using 60 days of prior prices at time t
+20. Bit_rsi_90 - Momentum indicator using 90 days of prior prices at time t
+
+Different windows of simple moving averages and exponential moving averages were analyzed. Exponential moving averages are more sensitive to more recent data so they may prove to be better predictors for Bitcoin price movements. The RSI or Relative Strength Index is another technical analysis indicator used to to determine momentum in price movements. The RSI has values between 0 to 100 with lower values indicating that the stock is oversold and higher values indicating the stock is overbought.
 
 ```{r,eval=TRUE,warning=FALSE}
 
@@ -89,27 +113,6 @@ btc_data <- btc_data[order(btc_data$Date),]
 
 #Check for any null values in the data set
 btc_data %>% summarise(across(everything(), ~ sum(is.na(.))))
-
-# Now let's do some feature engineering by adding some columns that would give 
-# us future and past results.
-# Feature Definitions:
-# Bit_returns -> the simple daily returns using the closing price at time t and t-1
-# Bit_log_returns - the daily log using the closing price
-# Bit_days_range - the range in price for that given date, highest price - the lowest price of that day.
-# Bit_log_wtd_ret - the week-to-date returns using the closing price at time t and t-7
-# Bit_log_biwtd_ret - the biweekly-to-date returns using the closing price at time t and t-14
-# Bit_log_mtd_ret - the month-to-date returns using the closing price at time t and t-30
-# ema_log_ret_7 - the exponential moving average of the week-to-date returns. Weighted average using values in range of time t and t-7
-# ema_log_ret_14 - the exponential moving average of the biweekly to date returns. Weighted average using values in range of time t and t-14
-# ema_log_ret_30 - the exponential moving average of the month to date returns. Weighted average using values in range of time t and t-30
-# moving_avg_10 - the 10 moving average of the closing price
-# moving_avg_20 - the 20 moving average of the closing price
-# moving_avg_50 - the 50 moving average of the closing price
-# moving_avg_50_diff - the difference between the 50 day moving average at t and t-1
-# moving_avg_50_diff_7 - the difference between the 50 day moving average at t and t-7
-# Bit_rsi_3 - Momentum indicator using 30 days of prior prices at time t
-# Bit_rsi_60 - Momentum indicator using 60 days of prior prices at time t
-# Bit_rsi_90 - Momentum indicator using 90 days of prior prices at time t
 
 # Get the daily log returns
 btc_data$Bit_log_returns <- c(NA, diff(log(btc_data$Close), lag=1))
@@ -233,9 +236,6 @@ adf.test(btc_data$moving_avg_50_diff_7[110:n])
 
 From the ADF Test we can see that from the features Closing Price, and Market Cap have unit roots which means that they are not non-stationary. We accounted for the non-stationary features in statistical models for time series data sets by creating features based on calculating the differences between consecutive observations in the data. Now that we have an understanding of what is stationary and non-stationary and we have accounted for non-stationary features, let's partition the data into training and testing out of time samples.
 
-Before we do so let's do some more engineering and engineer our potential target variables. Create dummy variables on when to buy and sell. First let's get a representation of the data to start.
-
-
 ```{r,eval=TRUE,warning=FALSE}
 
 time_cols <- c("Date", "Bit_log_wtd_ret", "Bit_log_biwtd_ret",
@@ -331,7 +331,7 @@ grid.arrange(time_line_ma, ncol = 1, nrow = 1)
 
 ```
 
-Let's create a another ema set of features, this time using a bi-weekly cadence.
+Let's create a another EMA set of features, this time using a bi-weekly cadence.
 
 ```{r,eval=TRUE,warning=FALSE}
 
@@ -621,15 +621,22 @@ xgb_grid <- base::expand.grid(
 
 ```
 
-```{r, message=FALSE}
+```{r,eval=TRUE,warning=FALSE}
+
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+
 xgb_model <- caret::train(
    x_train, y_train,
    trControl = xgb_trcontrol,
    tuneGrid = xgb_grid,
    method = "xgbTree",
    nthread = 1,
-   objective = "binary:logistic"
+   objective = "binary:logistic",
+   verbosity = 0
 )
+
+stopCluster(cl)
 
 ```
 
@@ -692,74 +699,82 @@ This time lets train the model stripping some of the lesser important features, 
 
 ```{r,eval=TRUE,warning=FALSE}
 
-#create the matrix values for the xgboost
-# x_train_2 <- btc_train %>%
-#                     dplyr::select(months, days, years,
-#                     Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
-#                     ema_log_mtdret_30, moving_avg_50_diff_7) %>%
-#                   as.matrix()
-# 
-# x_test_2 <- btc_test %>% 
-#                   dplyr::select(months, days, years,
-#                     Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
-#                     ema_log_mtdret_30, moving_avg_50_diff_7) %>%
-#                 as.matrix()
-# 
-# set.seed(123)
-# xgb_trcontrol_2 <- caret::trainControl(
-#    method = "timeslice",
-#    initialWindow = 700,
-#    horizon = 200,
-#    fixedWindow = FALSE, 
-#    allowParallel = FALSE
-# )
-#  
-# xgb_grid_2 <- base::expand.grid(
-#    list(
-#     nrounds = c(100, 200),
-#     max_depth = c(10, 15, 20), # maximum depth of a tree
-#     colsample_bytree = seq(0.5), # subsample ratio of columns when construction each tree
-#     eta = 0.1, # learning rate
-#     gamma = 0, # minimum loss reduction
-#     min_child_weight = 1,  # minimum sum of instance weight (hessian) needed ina child
-#     subsample = 1 # subsample ratio of the training instances
-# )
-# )
-# 
-# ```
-# 
-# ```{r,eval=TRUE,warning=FALSE}
-# 
-# xgb_model_2 <- suppressMessages(caret::train(
-#    x_train, y_train,
-#    trControl = xgb_trcontrol_2,
-#    tuneGrid = xgb_grid_2,
-#    method = "xgbTree",
-#    nthread = 1,
-#    objective = "binary:logistic"
-# ))
+# create the matrix values for the xgboost
+x_train_2 <- btc_train %>%
+                    dplyr::select(months, days, years,
+                    Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
+                    ema_log_mtdret_30, moving_avg_50_diff_7) %>%
+                  as.matrix()
+
+x_test_2 <- btc_test %>%
+                  dplyr::select(months, days, years,
+                    Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
+                    ema_log_mtdret_30, moving_avg_50_diff_7) %>%
+                as.matrix()
+
+set.seed(123)
+xgb_trcontrol_2 <- caret::trainControl(
+   method = "timeslice",
+   initialWindow = 700,
+   horizon = 200,
+   fixedWindow = FALSE,
+   allowParallel = FALSE
+   )
+
+xgb_grid_2 <- base::expand.grid(
+   list(
+    nrounds = c(100, 200),
+    max_depth = c(10, 15, 20), # maximum depth of a tree
+    colsample_bytree = seq(0.5), # sub-sample ratio of columns when construction each tree
+    eta = 0.1, # learning rate
+    gamma = 0, # minimum loss reduction
+    min_child_weight = 1,  # minimum sum of instance weight (hessian) needed ina child
+    subsample = 1 # sub-sample ratio of the training instances
+    )
+)
 
 ```
 
-get the results.
+```{r,eval=TRUE,warning=FALSE}
+
+cl <- makePSOCKcluster(5)
+registerDoParallel(cl)
+
+xgb_model_2 <- suppressMessages(caret::train(
+   x_train, y_train,
+   trControl = xgb_trcontrol_2,
+   tuneGrid = xgb_grid_2,
+   method = "xgbTree",
+   nthread = 1,
+   objective = "binary:logistic",
+   verbosity = 0
+))
+
+stopCluster(cl)
+
+```
+
+Although we have an accuracy of 100% on the training data, the accuracy dropped down to 66% on the test data which points to the possibility of over-fitting. Additionally, although the accuracy of 100% was higher than the 79% base line rate on the training data. This failed to translate over when the model was applied on the test data with the accuracy of 66% being below the base line rate of 67%. Sadly these results do not point to an effective model and more analysis will be required.
+
+The ROC curves also indicate possible over-fitting with the curve on the training data almost touching the upper left corner with an AUC of 100% while the curve on the test data is closer to the diagonal of the graph with an AUC of 51.9%:
 
 ```{r,eval=TRUE,warning=FALSE}
 
-# train_predicted_2 <- xgb_model_2 %>% predict(x_train)
-# print("The accuracy score for the buy indicator is bellow:")
-# Accuracy(train_predicted_2, btc_train$buy_indicator)
-# 
-# # Confusion matrix
-# confMat1_2 <- ConfusionMatrix(train_predicted_2, btc_train$buy_indicator)
-# confMat1_2
-# 
-# test_predicted_2 <- xgb_model_2 %>% predict(x_test)
-# print("The accuracy score for the buy indicator is bellow:")
-# Accuracy(test_predicted_2, btc_test$buy_indicator)
-# 
-# # Confusion matrix
-# confMat2_2 <- ConfusionMatrix(test_predicted_2, btc_test$buy_indicator)
-# confMat2_2
+train_predicted_2 <- xgb_model_2 %>% predict(x_train)
+print("The accuracy score for the buy indicator is bellow:")
+Accuracy(train_predicted_2, btc_train$buy_indicator)
+
+# Confusion matrix
+confMat1_2 <- ConfusionMatrix(train_predicted_2, btc_train$buy_indicator)
+confMat1_2
+
+test_predicted_2 <- xgb_model_2 %>% predict(x_test)
+print("The accuracy score for the buy indicator is bellow:")
+Accuracy(test_predicted_2, btc_test$buy_indicator)
+
+# Confusion matrix
+confMat2_2 <- ConfusionMatrix(test_predicted_2, btc_test$buy_indicator)
+confMat2_2
 
 ```
 
@@ -767,18 +782,18 @@ Check the kind of trade that the algorithm predicted.
 
 ```{r,eval=TRUE,warning=FALSE}
 
-# time_cols <- c("Date", "Close")
-# btc_sub <- btc_data[, (colnames(btc_data) %in% time_cols)]
-# btc_test <- left_join(btc_test, btc_sub, by="Date")
-# btc_test$pred_1 <- test_predicted_2
-# time_cols <- c("Date", "Close", "pred_1")
-# btc_time <- btc_test[, (colnames(btc_test) %in% time_cols)]
-# btc_points <- btc_time[btc_time$pred_1 == 1, ]
-# plot(x = btc_time$Date,
-#     y = btc_time$Close, main = "Buy Indicators between Jun 2013 - Jan 2015")
-# points(x = btc_points$Date, y=btc_points$Close, col="green")
-# 
-# max(btc_test$Date)
+time_cols <- c("Date", "Close")
+btc_sub <- btc_data[, (colnames(btc_data) %in% time_cols)]
+btc_test <- left_join(btc_test, btc_sub, by="Date")
+btc_test$pred_1 <- test_predicted_2
+time_cols <- c("Date", "Close", "pred_1")
+btc_time <- btc_test[, (colnames(btc_test) %in% time_cols)]
+btc_points <- btc_time[btc_time$pred_1 == 1, ]
+plot(x = btc_time$Date,
+    y = btc_time$Close, main = "Buy Indicators between Jun 2013 - Jan 2015")
+points(x = btc_points$Date, y=btc_points$Close, col="green")
+
+max(btc_test$Date)
 
 ```
 
@@ -808,6 +823,6 @@ Cryptocurrency asset class research is a rapidly evolving space, and our researc
 5. Would our analysis roughly stay true with other mainstream cryptocurrencies?
 6. Are there significant and consistent correlations between mainstream cryptocurrency features, including Bitcoin?
 7. What is the impact of taxes on market size and trading volume in the future?
-8. What was the impact of the pandemic and other global macro economic forces such as public debt and unemplooyment rates, on cryptocurrency features?
+8. What was the impact of the pandemic and other global macro economic forces such as public debt and unemployment rates, on cryptocurrency features?
 
 # References
