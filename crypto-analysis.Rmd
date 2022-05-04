@@ -4,13 +4,11 @@ author: "Tiffany Valdecantos, Terrill Toe, Adetayo Adegoke"
 date: "`r format(Sys.Date())`"
 csl: vancouver.csl
 biblio-style: vancouver
-bibliography: references.bib
 font-size: 11pt
 link-citations: true
 output: 
   pdf_document:
     toc: FALSE
-    citation_package: biblatex
 ---
 
 ```{r setup, include=FALSE}
