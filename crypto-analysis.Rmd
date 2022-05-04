@@ -1,5 +1,5 @@
 ---
-title: "Examining predictive pricing indicators for cryptocurrency assets"
+title: "Examining Predictive Pricing Indicators for Cryptocurrency Assets"
 author: "Tiffany Valdecantos, Terrill Toe, Adetayo Adegoke"
 date: "`r format(Sys.Date())`"
 csl: vancouver.csl
@@ -17,10 +17,9 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r, echo = FALSE}
-# install packages
-suppressMessages(library(corrplot))                 # Install reshape2 package
-suppressMessages(library("reshape2"))
+```{r, echo = FALSE, warning=FALSE}
+suppressMessages(library(corrplot))
+suppressMessages(library(reshape2))
 suppressMessages(library(readr))
 suppressMessages(library(caret))
 suppressMessages(library(UsingR))
@@ -34,68 +33,58 @@ suppressMessages(library(corrplot))
 suppressMessages(library(pROC))
 suppressMessages(library(MLmetrics))
 suppressMessages(library(xgboost))
-suppressMessages(library(doParallel))
-
-# Source our R script with functions
-source("src/quant_funcs.R")
-
 ```
 
 # Research Question and Motivation
 
-According to the U.S. government's Internal Revenue Service (IRS), a virtual currency is a digital representation of value, other than a representation of the U.S. dollar or a foreign currency ("real currency"), that functions as a unit of account, a store of value, and a medium of exchange. The IRS also defines cryptocurrencies as a virtual currency that uses cryptography to secure digitally recorded transactions on a distributed ledger, such as a blockchain @CryptoDefIrs.
+According to the U.S. government's Internal Revenue Service (IRS), a virtual currency is a digital representation of value, other than a representation of the U.S. dollar or a foreign currency ("real currency"), that functions as a unit of account, a store of value, and a medium of exchange. The IRS defines cryptocurrencies as a virtual currency that uses cryptography to secure digitally recorded transactions on a distributed ledger, such as a blockchain [1].
 
-Cryptocurrencies are mainstream assets electronically traded by many investors globally, similar to stocks and other equity types. There are many different cryptocurrencies, with several more being introduced to the public every few months for the opportunity to make transactions based on these assets. There is value to examining factors that drive cryptocurrency asset prices since the market size of these currencies is currently over 1 trillion USD in traditional fiat USD and over 32 trillion USD by 2027 @CryptoMarketSizeYahoo.
+Cryptocurrencies are mainstream assets electronically traded by many investors globally, similar to stocks and other equity types. There are many different cryptocurrencies, with several more being introduced to the public every few months for the opportunity to make transactions based on these assets. There is value to examining factors that drive cryptocurrency asset prices since the market size of these currencies is currently over 1 trillion USD in traditional fiat USD and over 32 trillion USD by 2027 [2]. 
 
-Cryptocurrencies significantly influence the global economy because of their growing market size. Researchers examining cryptocurrency pricing predictors can inform government, business, and retail investors in making more efficient transactions.
+Cryptocurrencies significantly influence the global economy because of their growing market size. Researchers examining cryptocurrency pricing predictors can inform government, business, and retail investors in making more profitable trading strategies.
+
+This research paper examines the following question as it pertains to cryptocurrencies:
+
+Can the technical analysis method of analyzing moving averages in Bitcoin prices be effective in predicting future upward price movement?
 
 # Hypothesis
 
-This research paper examines the following questions as it pertains to the Bitcoin (BTC) cryptocurrency:
+We explore the method of analyzing moving averages used by technical analysts in the capital markets industry to make recommendations for future stock price movements. In doing this, technical analysts search for momentum in price movement caused by the disposition effect, which Bodie defined as “the tendency of investors to hold on to losing investments” (Bodie 384) [3]. To take advantage of this pattern, the investor must sell their holdings once the signal of the momentum of falling prices is determined. Prices would then continue falling until they bottom out and head back up again. At this point, the investor will watch for the signal of the rising momentum of stock prices. Once this signal is determined, that will be the investor’s chance to buy the stock and ride the prices up. Through this strategy, the investor can cut losses when prices are falling and buy stocks cheaper when prices are increasing further, which will result in profits for the investor if all goes according to plan. This paper will only focus on buy strategies associated with upward price movement.
 
-*Can the technical analysis method of looking at the relation of bitcoin prices to a moving average predict future price movements?*
+We hypothesize that investors can use a similar approach of analyzing moving averages to predict future movements in Bitcoin prices. Cryptocurrencies are emerging asset classes that researchers have not extensively studied. As such, unseen opportunities may exist. We suspect that the cryptocurrency market has a larger share of retail investors versus institutional investors relative to the traditional stock market. Retail investors do not have the same sophisticated tools that institutional investors have access to, so they may be more predisposed to the disposition effect. This may mean that there are more opportunities to execute successful trading strategies.
 
-We explore the method of analyzing moving averages used by technical analysts in the capital markets industry to make recommendations for stock price movements. In doing this, technical analysts search for momentum in price movement caused by the disposition effect, which Bodie, Kane, and Marcus defined as “the tendency of investors to hold on to losing investments” @Investments11Edition. To take advantage of this pattern, the investor must sell their holdings once the signal of the momentum of falling prices is determined. Prices would then continue falling until they bottom out and head back up again. At this point, the investor will watch for the signal of the rising momentum of stock prices. Once this signal is determined, that will be the investor’s chance to buy the stock and ride the prices up. Through this strategy, the investor can cut losses when prices are falling and buy stocks cheaper when prices are increasing further, which will result in profits for the investor if all goes according to plan.
+# Data Exploration and Methodology
 
-We hypothesize that investors can use a similar approach of moving averages to predict future movements in Bitcoin prices. Cryptocurrencies are emerging asset classes that researchers have not extensively studied. As such, unseen opportunities may exist. We suspect that the cryptocurrency market has a larger share of retail investors versus institutional investors relative to the traditional stock market. Retail investors do not have the same sophisticated tools that institutional investors have access to, so they may be more predisposed to the disposition effect.
+We collected data for this experiment from the following source:
 
-An investor using the technical analysis approach of moving averages would surmise that when current asset prices move from above to below the moving average line, this is an indicator that future bitcoin prices will head lower. The investor would consider selling their holdings as a consequence of this event. Conversely, if asset prices head from below to above the moving average line, this is a buy signal to an investor.
-
-# Data Source and Engineering
-
-We collected data for this experiment from the following sources:
-
-(1) Cryptocurrency Historical Prices @CryptoPrices
+(1) Cryptocurrency Historical Prices [4]
 
 The following features were evaluated for this analysis:
 
-1. Bit_returns - the simple daily returns using the closing price at time t and t-1
-2. Bit_log_returns - the daily log returns using the closing price at time t and t-1
-3. Bit_days_range - the range in price movements for the given day defined as highest price - the lowest price of that day
-4. Bit_log_wtd_ret - the week to date returns using the closing price at time t and t-7
-5. Bit_log_biwtd_ret - the bi-weekly to date returns using the closing price at time t and t-14
-6. Bit_log_mtd_ret - the month to date returns using the closing price at time t and t-30
-7. ema_log_ret_7 - the exponential moving average of the week to date returns defined as the weighted average using values in range of time t and t-7
-8. ema_log_ret_14 - the exponential moving average of the bi-weekly to date returns defined as the weighted average using values in range of time t and t-14
-9. ema_log_ret_30 - the exponential moving average of the month to date returns defined as the weighted average using values in range of time t and t-30
-10. ema_log_biret_7 - the exponential moving average using bi-weekly returns between time t and t-7
-11. ema_log_biret_14 - the exponential moving average using bi-weekly returns between time t and t-14
-12. ema_log_biret_30 - the exponential moving average using bi-weekly returns between time t and t-30
-13. moving_avg_10 - the 10-day simple moving average of the closing price
-14. moving_avg_20 - the 20-day simple moving average of the closing price
-15. moving_avg_50 - the 50-day simple moving average of the closing price
-16. moving_avg_50_diff - the difference between the 50-day moving average at t and t-1
-17. moving_avg_50_diff_7 - the difference between the 50-day moving average at t and t-7
-18. Bit_rsi_3 - Momentum indicator using 30 days of prior prices at time t
-19. Bit_rsi_60 - Momentum indicator using 60 days of prior prices at time t
-20. Bit_rsi_90 - Momentum indicator using 90 days of prior prices at time t
+1.	Bit_returns - the simple daily returns using the closing price at time t and t-1
+2.	Bit_log_returns - the daily log returns utilizing the closing price at time t and t-1
+3.	Bit_days_range - the range in price movements for the given day defined as the highest price - the lowest price of that day
+4.	Bit_log_wtd_ret - the week to date returns using the closing price at time t and t-7
+5.	Bit_log_biwtd_ret - the bi-weekly to date returns using the closing price at time t and t-14
+6.	Bit_log_mtd_ret - the month to date returns using the closing price at time t and t-30
+7.	ema_log_ret_7 - the exponential moving average of the week to date returns defined as the weighted average using values in the range of time t and t-7
+8.	ema_log_ret_14 - the exponential moving average of the bi-weekly to date returns defined as the weighted average using values in the range of time t and t-14
+9.	ema_log_ret_30 - the exponential moving average of the month to date returns defined as the weighted average using values in the field of time t and t-30
+10.	ema_log_biret_7 - the exponential moving average using bi-weekly returns between time t and t-7
+11.	ema_log_biret_14 - the exponential moving average using bi-weekly returns between time t and t-14
+12.	ema_log_biret_30 - the exponential moving average using bi-weekly returns between time t and t-30
+13.	moving_avg_10 - the 10-day simple moving average of the closing price
+14.	moving_avg_20 - the 20-day simple moving average of the closing price
+15.	moving_avg_50 - the 50-day simple moving average of the closing price
+16.	moving_avg_50_diff - the difference between the 50-day moving average at t and t-1
+17.	moving_avg_50_diff_7 - the difference between the 50-day moving average at t and t-7
+18.	Bit_rsi_3 - Momentum indicator using 30 days of prior prices at time t
+19.	Bit_rsi_60 - Momentum indicator using 60 days of prior prices at time t
+20.	Bit_rsi_90 - Momentum indicator using 90 days of prior prices at time t
 
-Different windows of simple moving averages and exponential moving averages were analyzed. Exponential moving averages are more sensitive to more recent data so they may prove to be better predictors for Bitcoin price movements. The RSI or Relative Strength Index is another technical analysis indicator used to to determine momentum in price movements. The RSI has values between 0 to 100 with lower values indicating that the stock is oversold and higher values indicating the stock is overbought.
+Different windows of simple moving averages and exponential moving averages were analyzed. Exponential moving averages are more sensitive to more recent data so they may prove to be better predictors for Bitcoin price movements. (Citation here?) The RSI or Relative Strength Index is another technical analysis indicator used to to determine momentum in price movements. The RSI has values between 0 to 100 with lower values indicating that the stock is oversold and higher values indicating the stock is overbought. (Citation here?)
 
-```{r,eval=TRUE,warning=FALSE}
-
-# The chart below shows the historical movement in Bitcoin prices compared to 
-# the 50-day moving average
+```{r,eval=TRUE, include=FALSE}
 
 # Get data for Bitcoin (btc)
 btc_data <- read.csv("coin_Bitcoin.csv")
@@ -167,14 +156,14 @@ btc_data$Bit_rsi_60 <- RSI(btc_data$Close, n=60, maType = "EMA") / 100
 btc_data$Bit_rsi_90 <- RSI(btc_data$Close, n=90, maType = "EMA") / 100
 summary(btc_data)
 ```
+Different windows of simple moving averages and exponential moving averages were analyzed. Exponential moving averages are more sensitive to more recent data [5], so they may prove to be better predictors for Bitcoin price movements. The RSI or Relative Strength Index is another technical analysis indicator used to determine momentum in price movements. The RSI has values between 0 to 100, with lower values indicating that the stock is oversold and higher values indicating the stock is overbought [6].
 
-Because we are dealing with time series data, we will run the Augmented Dickey Fuller (ADF) test on our continuous variables to test for stationarity.A stationary time series is one whose properties do not depend on the time at which the series is observed.@Stationarity
+There are specific properties with time-series data that require extra consideration. Patterns observed in the data, such as trends and seasonality, may result in temporal dependencies between data points. Trends may lead to means that change over time and seasonality may result in variances that change over time. Therefore, the usual regression model assumption of errors being independent normal random variables with a mean of zero and constant variance will not hold.
 
-```{r,eval=TRUE,warning=FALSE}
+We run the Augmented Dickey-Fuller (ADF) [7] test on our continuous variables to check for stationary properties. A stationary time series is one whose properties do not depend on the time at which the series is observed and will therefore have more stable means and variances [8].
 
-print("################## Testing for the Close ##################")
-adf.test(btc_data$Close)
 
+```{r, eval=TRUE, include=FALSE}
 print("################## Testing for the log Returns ##################")
 adf.test(btc_data$Bit_log_returns[2:n])
 
@@ -183,9 +172,6 @@ adf.test(btc_data$Bit_returns[2:n])
 
 print("################## Testing for the Volume ##################")
 adf.test(btc_data$Volume)
-
-print("################## Testing for the Marketcap ##################")
-adf.test(btc_data$Marketcap)
 
 print("################## Testing for the Day's Range ##################")
 adf.test(btc_data$Bit_days_range)
@@ -231,12 +217,27 @@ adf.test(btc_data$moving_avg_50_diff[100:n])
 
 print("################## Testing for the 7 Day Difference between 50 day moving average ##################")
 adf.test(btc_data$moving_avg_50_diff_7[110:n])
+```
+```{r,eval=TRUE, warning=FALSE}
+
+print("################## Testing for the Close ##################")
+adf.test(btc_data$Close)
+
+print("################## Testing for the Marketcap ##################")
+adf.test(btc_data$Marketcap)
+
+print("################## Testing for 20 day moving average ##################")
+adf.test(btc_data$moving_avg_20[21:n])
+
+print("################## Testing for 10 day moving average ##################")
+adf.test(btc_data$moving_avg_10[11:n])
 
 ```
+The ADF test shows that the 10-day moving average, 20-day moving average, the Closing Price, and Market Cap have unit roots were non-stationary. We account for the non-stationary features in statistical models for time series data sets by creating features based on calculating the differences between consecutive observations in the data [9]. This is the motivation behind creating the variables moving_avg_50_diff and moving_avg_50_diff_7.
 
-From the ADF Test we can see that from the features Closing Price, and Market Cap have unit roots which means that they are not non-stationary. We accounted for the non-stationary features in statistical models for time series data sets by creating features based on calculating the differences between consecutive observations in the data. Now that we have an understanding of what is stationary and non-stationary and we have accounted for non-stationary features, let's partition the data into training and testing out of time samples.
+Now that we understand what is stationary and non-stationary and have accounted for non-stationary features let's discuss the target variables. Observe the graphs below:
 
-```{r,eval=TRUE,warning=FALSE}
+```{r,eval=TRUE, include=FALSE, warning=FALSE}
 
 time_cols <- c("Date", "Bit_log_wtd_ret", "Bit_log_biwtd_ret",
                "Bit_log_mtd_ret")
@@ -329,24 +330,12 @@ grid.arrange(wtd_dens, wtd_qq, wtd_box, biwtd_dens, biwtd_qq, biwtd_box, mtd_den
 grid.arrange(ma_diff_dens, ma_diff_qq, ma_diff_box, ma7_diff_dens, ma7_diff_qq, ma7_diff_box, ncol = 3, nrow = 2)
 grid.arrange(time_line_ma, ncol = 1, nrow = 1)
 
-```
-
-Let's create a another EMA set of features, this time using a bi-weekly cadence.
-
-```{r,eval=TRUE,warning=FALSE}
-
-# Additional Features:
-# 
-# ema_log_biret_7 - the exponential moving average using biweekly returns. The time window for the value is at time t and t-7
-# ema_log_biret_14 - the exponential moving average using biweekly returns. The time window for the value is at time t and t-14
-# ema_log_biret_30 - the exponential moving average using biweekly returns. The time window for the value is at time t and t-30
+#Let's create a another exponential moving average set of features, this time using a bi-weekly cadence.
 
 #Get the 7 day exponential moving average of daily returns
 btc_data$ema_log_biret_7 <- EMA(btc_data$Bit_log_biwtd_ret, 7)
-
 #Get the 14 day exponential moving average of daily returns
 btc_data$ema_log_biret_14 <- EMA(btc_data$Bit_log_biwtd_ret, 14)
-
 #Get the 30 day exponential moving average of daily returns
 btc_data$ema_log_biret_30 <- EMA(btc_data$Bit_log_biwtd_ret, 30)
 
@@ -392,18 +381,16 @@ ma_box <- ggplot(btc_data, aes(y = moving_avg_50)) + geom_boxplot(width = 0.5) +
 grid.arrange(time_line2, time_line3, time_line6, time_line50, ncol = 1, nrow = 4)
 grid.arrange(ma_dens, ma_qq, ma_box, ncol = 3, nrow = 1)
 
-```
-Get the EMA for monthly returns, plot it against the ema for Bi wtd and closing prices of Bitcoin
 
-```{r,eval=TRUE,warning=FALSE}
+#Get the EMA for monthly returns, plot it against the ema for Bi wtd and closing prices of Bitcoin
 
-# Get the 7-day exponential moving average of daily returns
+#Get the 7 day exponential moving average of daily returns
 btc_data$ema_log_mtdret_7 <- EMA(btc_data$Bit_log_mtd_ret, 7)
 
-# Get the 14-day exponential moving average of daily returns
+#Get the 14 day exponential moving average of daily returns
 btc_data$ema_log_mtdret_14 <- EMA(btc_data$Bit_log_mtd_ret, 14)
 
-# Get the 30-day exponential moving average of daily returns
+#Get the 30 day exponential moving average of daily returns
 btc_data$ema_log_mtdret_30 <- EMA(btc_data$Bit_log_mtd_ret, 30)
 
 time_cols <- c("Date", "ema_log_mtdret_7", "ema_log_mtdret_14","ema_log_mtdret_30")
@@ -426,20 +413,16 @@ btc_time <- btc_time[btc_time$Date > "2014-01-01" &    # Extract data frame subs
 
 grid.arrange(time_line3, time_line5, time_line6, ncol = 1, nrow = 3)
 
-```
+#Get the graphs of the EMA values that were recently created.
 
-Get the graphs of the EMA values that were recently created.
-
-```{r,eval=TRUE,warning=FALSE}
-
-# Plot the simple returns as a density plot, box plot, and qqplot
+# plot the simple returns as a density plot, box plot, and qqplot
 ema_mtd_dens <-  ggplot(btc_data, aes(x=ema_log_mtdret_30)) +
               geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
               geom_density() + ggtitle("EMA 30 MTD Returns")
 ema_mtd_qq <- ggplot(btc_data, aes(sample = ema_log_mtdret_30)) + stat_qq() + stat_qq_line() + ggtitle("EMA 30 MTD Returns")
 ema_mtd_box <- ggplot(btc_data, aes(y = ema_log_mtdret_30)) + geom_boxplot(width = 0.5) + ggtitle("EMA 30 MTD Returns")
 
-# Plot the simple returns as a density plot, box plot, and qqplot
+# plot the simple returns as a density plot, box plot, and qqplot
 ema_biwtd_dens <-  ggplot(btc_data, aes(x=ema_log_biret_30)) +
               geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
               geom_density() + ggtitle("EMA BI-WTD Returns")
@@ -448,19 +431,13 @@ ema_biwtd_box <- ggplot(btc_data, aes(y = ema_log_biret_30)) + geom_boxplot(widt
 
 grid.arrange(ema_mtd_dens, ema_mtd_qq, ema_mtd_box, ema_biwtd_dens, ema_biwtd_qq, ema_biwtd_box, ncol = 3, nrow = 2)
 
-```
-
-Shift the week to date, bi week to date, and month to date up the number of units it used to calclute the metric. (i.e week date used t and t-7 to calculate. Shift the rows up replacing the previous null values). This will now give the future returns at time t.
-
-```{r,eval=TRUE,warning=FALSE}
-
-# Shift the columns back n days so current features align with the labeled future values
+#Shift the columns back n days so current features align with the labeled future values
 n <- nrow(btc_data) 
 btc_data$Bit_log_wtd_ret_lag <- c(btc_data$Bit_log_wtd_ret[8:n], rep(NA,7))
 btc_data$Bit_log_biwtd_ret_lag <- c(btc_data$Bit_log_biwtd_ret[15:n], rep(NA,14))
 btc_data$Bit_log_mtd_ret_lag <- c(btc_data$Bit_log_mtd_ret[31:n], rep(NA,30))
 
-# Create the indicators on when to buy when to sell and when to hold
+#Create the indicators on when to buy when to sell and when to hold
 btc_data$buy_sell_ind_wtd <- ifelse(btc_data$Bit_log_wtd_ret_lag >=  0.2, 1, ifelse(btc_data$Bit_log_wtd_ret_lag <=  -0.15, -1, 0))
 btc_data$buy_sell_ind_biwtd <- ifelse(btc_data$Bit_log_biwtd_ret_lag >=  0.2, 1, ifelse(btc_data$Bit_log_biwtd_ret_lag <=  -0.15, -1, 0))
 btc_data$buy_sell_ind_mtd <- ifelse(btc_data$Bit_log_mtd_ret_lag >=  0.2, 1, ifelse(btc_data$Bit_log_mtd_ret_lag <=  -0.15, -1, 0))
@@ -470,87 +447,88 @@ btc_data$buy_sell_ind_wtd <- as.factor(btc_data$buy_sell_ind_wtd)
 btc_data$buy_sell_ind_biwtd <- as.factor(btc_data$buy_sell_ind_biwtd)
 btc_data$buy_sell_ind_mtd <- as.factor(btc_data$buy_sell_ind_mtd)
 
-# Remove the rows with null values at the beginning and end of the data frame.
+# remove the rows with null values at the beginning and end of the data frame.
 btc <- btc_data[complete.cases(btc_data),]
 
-# Partition the data into training and testing sets.
-train_indx <- round(0.7 * nrow(btc))
-btc_train <- btc[1:train_indx,]
-test_indx <- train_indx + 1
-n_btc <- nrow(btc)
-btc_test <- btc[test_indx:n_btc,]
+#Look at the relationships between EMA Values and their expected future returns
 
-```
-
-Look at the relationships between EMA Values and their expected future returns
-
-```{r,eval=TRUE,warning=FALSE}
-
-day <- ggplot(btc_train, aes(x=Bit_log_mtd_ret, y=Bit_log_wtd_ret_lag, color=buy_sell_ind_wtd)) + 
+day <- ggplot(btc_data, aes(x=Bit_log_mtd_ret, y=Bit_log_wtd_ret_lag, color=buy_sell_ind_wtd)) + 
         geom_point(alpha=0.5, shape=18) + geom_vline(aes(xintercept = 0)) + geom_hline(aes(yintercept = 0))
 
-week <- ggplot(btc_train, aes(x=ema_log_biret_30, y=Bit_log_wtd_ret_lag, color=buy_sell_ind_wtd)) + 
+week <- ggplot(btc_data, aes(x=ema_log_biret_30, y=Bit_log_wtd_ret_lag, color=buy_sell_ind_wtd)) + 
         geom_point(alpha=0.5, shape=18) + geom_vline(aes(xintercept = 0)) + geom_hline(aes(yintercept = 0))
 
-month <- ggplot(btc_train, aes(x=Bit_log_biwtd_ret_lag, y=Bit_log_mtd_ret_lag, color=buy_sell_ind_mtd)) + 
+month <- ggplot(btc_data, aes(x=Bit_log_biwtd_ret_lag, y=Bit_log_mtd_ret_lag, color=buy_sell_ind_mtd)) + 
         geom_point(alpha=0.5, shape=18) + geom_vline(aes(xintercept = 0)) + geom_hline(aes(yintercept = 0))
 
 grid.arrange(day, week, month, ncol = 1, nrow = 3)
 
-names(btc_train)
-cor_feat <- cor(btc_train[, 5:34])
+names(btc_data)
+cor_feat <- cor(btc_data[, 5:34])
 corrplot(cor_feat, method="color", addCoef.col = 0.5, number.cex = 0.5, tl.cex = 0.5)
 
 ```
+Now that we have an understanding of what is stationary and non-stationary and we have accounted for non-stationary features, let's discuss the target variables. Observe the below graphs:
 
-plot the buy and sell points on a chart of prices.
+```{r, eval=TRUE, warning=FALSE}
+# plot the simple returns as a density plot, box plot, and qqplot
+wtd_dens <-  ggplot(btc_data, aes(x=Bit_log_wtd_ret)) +
+              geom_histogram(aes(y = ..density..), bins= 20, colour = 1, fill= "blue", alpha = 0.6) +
+              geom_density() + ggtitle("WTD Returns")
 
-```{r,eval=TRUE,warning=FALSE}
+wtd_qq <- ggplot(btc_data, aes(sample = Bit_log_wtd_ret)) + stat_qq() + stat_qq_line() + ggtitle("WTD Returns")
 
-time_cols <- c("Date", "Close", "buy_sell_ind_mtd")
-btc_time <- btc_data[, (colnames(btc_data) %in% time_cols)]
-btc_time <- btc_time[btc_time$Date > "2013-06-01" &    # Extract data frame subset
-                   btc_time$Date < "2015-01-01", ]
-btc_points <- btc_time[btc_time$buy_sell_ind_mtd == -1, ]
-plot(x = btc_time$Date,
-    y = btc_time$Close, main = "Sell Indicators between Jun 2013 - Jan 2015")
-points(x = btc_points$Date, y=btc_points$Close, col="red")
+wtd_box <- ggplot(btc_data, aes(y = Bit_log_wtd_ret)) + geom_boxplot(width = 0.5) + ggtitle("WTD Returns")
 
+grid.arrange(wtd_dens, wtd_qq, wtd_box, biwtd_dens, biwtd_qq, biwtd_box, mtd_dens, mtd_qq, mtd_box, ncol = 3, nrow = 3)
+
+```
+Since the log weighted returns appear closer to normal, we use this variable to label our indicator target variables. Even though there is some variation in the tails, the overall shape is still normal. Our purpose for this analysis is to search for the momentum of Bitcoin upward price movements since investors can create different buy strategies if they can predict these movements. For this purpose, we use the following thresholds to label our momentum indicator target variables. If the log of average returns over the future month period is greater than 20%, it is marked "1" as a potential buy opportunity. Otherwise, the target variable is marked "0" to indicate a window of price movement due to random variation or downward price movement, which is outside the scope of our analysis.
+
+The choice of the 20% threshold is arbitrary so further analysis may be required to determine the optimum threshold. Certain considerations may need to be made in deciding this threshold, such as the level of an investor’s conservativeness and transaction expenses. The price movement needs to be big enough for the investor to pay transaction costs to initiate their strategy, so they do not want to be too sensitive and react to events that end up being immaterial. Our team decided that 20% up is a large enough price movement to warrant action.
+
+The green points in the plot below show the target variables as potential buy opportunities:
+
+```{r, eval=TRUE, warning=FALSE}
+#plot the buy points on a chart of prices.
 time_cols <- c("Date", "Close", "buy_sell_ind_mtd")
 btc_time <- btc_data[, (colnames(btc_data) %in% time_cols)]
 btc_time <- btc_time[btc_time$Date > "2013-06-01" &    # Extract data frame subset
                    btc_time$Date < "2015-01-01", ]
 btc_points <- btc_time[btc_time$buy_sell_ind_mtd == 1, ]
 plot(x = btc_time$Date,
-    y = btc_time$Close, main = "Buy Indicators between Jun 2013 - Jan 2015")
+    y = btc_time$Close, main = "Buy Indicators between Jun 2013 - Jan 2015 (Green)",
+    xlab = "Date", ylab = "Price")
 points(x = btc_points$Date, y=btc_points$Close, col="green")
-
 ```
+Since the form of the question we are trying to answer is categorical - Is this a good time to buy? – we decided to look at classification models instead of regression models. Logistic regression was ruled out due to the assumptions being violated with time-series data as explained above. Additionally, the predictor variables are highly correlated since they are moving averages over overlapping periods and linear models do not perform well with high correlation between predictors. From among the remaining tools available for classification problems, we chose Extreme Gradient Boosting for this analysis.
 
-After some research we will use the xgboost algorithm to classify when to buy and when to sell based where we think positive returns will be a month out from the point in time.
+#### Results and Conclusions
 
-XGBoost can be used for either regression or classification problems. In our case we engineered our target variable with 0s and 1s, making it a classification problem. We will see if using xgboost as classification model would be able to spot good buy moments in the data.
+Due to the unique nature of time series data, special consideration was needed to create the training and test data sets. The data points are time-dependent, and we needed to keep the temporal structure of the data, so the usual way of randomly splitting the data into training and test sets would not work. Instead, we kept the older 70% of the data as the training set and left the more recent 30% of the data as test. This way, we retain the order of the data points in both the training and test data sets.
 
-Xgboost in time series: https://machinelearningmastery.com/xgboost-for-time-series-forecasting/
+From among the features we examined, only the features below were found to be important in our Extreme Gradient Boosting model:
 
-Why model using log returns: https://medium.datadriveninvestor.com/why-we-use-log-returns-for-stock-returns-820cec4510ba
-
-# Main
-
-```{r,eval=TRUE,warning=FALSE}
+```{r, eval=TRUE, warning=FALSE, include=FALSE}
+#Partition the data into training and testing sets.
+train_indx <- round(0.7 * nrow(btc))
+btc_train <- btc[1:train_indx,]
+test_indx <- train_indx + 1
+n_btc <- nrow(btc)
+btc_test <- btc[test_indx:n_btc,]
 
 str(btc_train)
 rm_cols <- c("SNo", "Name", "Symbol", "High", "Low", "Open", "Close", "Marketcap", "buy_sell_ind_wtd", "buy_sell_ind_biwtd",
              "Bit_log_wtd_ret_lag", "Bit_log_biwtd_ret_lag", "Bit_log_mtd_ret_lag", "buy_sell_ind_mtd", "moving_avg_10",
              "moving_avg_20")
-
-# Predict on when is a good time to buy
+#Predict on when is a good time to buy
 btc_train$buy_indicator <- ifelse(btc_train$buy_sell_ind_mtd == 1, 1, 0)
 btc_test$buy_indicator <- ifelse(btc_test$buy_sell_ind_mtd == 1, 1, 0)
 btc_train <- btc_train[, !(colnames(btc_train) %in% rm_cols)]
 btc_test <- btc_test[, !(colnames(btc_test) %in% rm_cols)]
 
 # Convert the date into integers of month day and year, each with its own column to preserve the temporal aspect of the data
+
 btc_train <- btc_train %>%
     dplyr::mutate(., 
                   months = lubridate::month(Date),
@@ -562,56 +540,46 @@ btc_test <- btc_test %>%
                   months = lubridate::month(Date),
                   years = lubridate::year(Date),
                   days = lubridate::day(Date))
-
-# Convert the days column to numeric
+#Convert the days column to numeric
 btc_test$days <- as.numeric(btc_test$days)
 btc_train$days <- as.numeric(btc_train$days)
 btc_test$months <- as.numeric(btc_test$months)
 btc_train$months <- as.numeric(btc_train$months)
 btc_test$year <- as.numeric(btc_test$years)
 btc_train$years <- as.numeric(btc_train$years)
-
-# Create the matrix values for the xgboost
-x_train <- btc_train %>%
-                    dplyr::select(months, days, years, Volume, Bit_log_returns, Bit_returns, Bit_days_range, Bit_log_wtd_ret, Bit_log_biwtd_ret,
-                    Bit_log_mtd_ret, ema_log_ret_7, ema_log_ret_14, ema_log_ret_30, Bit_rsi_3, Bit_rsi_60, Bit_rsi_90,
-                    ema_log_biret_7, ema_log_biret_14, ema_log_biret_30, ema_log_mtdret_7, ema_log_mtdret_14, ema_log_mtdret_30, moving_avg_50,
-                    moving_avg_50_diff, moving_avg_50_diff_7) %>%
+```
+```{r, eval=TRUE, warning=FALSE, include=FALSE}
+#create the matrix values for the xgboost and only inlcude important features
+x_train_2 <- btc_train %>%
+                    dplyr::select(months, days, years,
+                    Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
+                    ema_log_mtdret_30, moving_avg_50_diff_7) %>%
                   as.matrix()
 
-x_test <- btc_test %>% 
-                  dplyr::select(months, days, years, Volume, Bit_log_returns, Bit_returns, Bit_days_range, Bit_log_wtd_ret, Bit_log_biwtd_ret,
-                  Bit_log_mtd_ret, ema_log_ret_7, ema_log_ret_14, ema_log_ret_30, Bit_rsi_3, Bit_rsi_60, Bit_rsi_90,
-                  ema_log_biret_7, ema_log_biret_14, ema_log_biret_30, ema_log_mtdret_7, ema_log_mtdret_14, ema_log_mtdret_30, moving_avg_50,
-                  moving_avg_50_diff, moving_avg_50_diff_7) %>%
+x_test_2 <- btc_test %>% 
+                  dplyr::select(months, days, years,
+                    Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
+                    ema_log_mtdret_30, moving_avg_50_diff_7) %>%
                 as.matrix()
+
 y_train <- as.factor(btc_train$buy_indicator)
 y_test <- as.factor(btc_test$buy_indicator)
-
 ```
+```{r, eval=TRUE, warning=FALSE, include=FALSE}
 
-link:
-https://www.r-bloggers.com/2019/09/time-series-forecasting-with-random-forest/
-
-```{r,eval=TRUE,warning=FALSE}
-
-#nrow(btc_train)
 set.seed(123)
-xgb_trcontrol <- caret::trainControl(
+xgb_trcontrol_2 <- caret::trainControl(
    method = "timeslice",
-   initialWindow = 200,
-   horizon = 70,
+   initialWindow = 700,
+   horizon = 200,
    fixedWindow = FALSE, 
    allowParallel = FALSE
 )
-
-```
-
-```{r,eval=TRUE,warning=FALSE}
-xgb_grid <- base::expand.grid(
+ 
+xgb_grid_2 <- base::expand.grid(
    list(
-    nrounds = c(150, 250),
-    max_depth = c(20, 50, 100), # maximum depth of a tree
+    nrounds = c(100, 200),
+    max_depth = c(10, 15, 20), # maximum depth of a tree
     colsample_bytree = seq(0.5), # subsample ratio of columns when construction each tree
     eta = 0.1, # learning rate
     gamma = 0, # minimum loss reduction
@@ -620,209 +588,93 @@ xgb_grid <- base::expand.grid(
 ))
 
 ```
-
-```{r,eval=TRUE,warning=FALSE}
-
-cl <- makePSOCKcluster(5)
-registerDoParallel(cl)
-
-xgb_model <- caret::train(
-   x_train, y_train,
-   trControl = xgb_trcontrol,
-   tuneGrid = xgb_grid,
-   method = "xgbTree",
-   nthread = 1,
-   objective = "binary:logistic",
-   verbosity = 0
-)
-
-stopCluster(cl)
-
-```
-
-```{r,eval=TRUE,warning=FALSE}
-xgb_model$bestTune
-
-importance_matrix <- xgb.importance(model = xgb_model$finalModel)
-print(importance_matrix)
-xgb.plot.importance(importance_matrix = importance_matrix)
-
-```
-
-As we can see from the feature
-
-## Methodology
-```{r,eval=TRUE,warning=FALSE}
-
-train_predicted <- xgb_model %>% predict(x_train)
-print("The accuracy score for the buy indicator is below:")
-Accuracy(train_predicted, btc_train$buy_indicator)
-
-#Confusion matrix
-confMat1 <- ConfusionMatrix(train_predicted, btc_train$buy_indicator)
-confMat1
-
-```
-
-With results like that our model could be over fitted.
-
-```{r,eval=TRUE,warning=FALSE}
-
-test_predicted <- xgb_model %>% predict(x_test)
-print("The accuracy score for the buy indicator is below:")
-Accuracy(test_predicted, btc_test$buy_indicator)
-
-# Confusion matrix
-confMat2 <- ConfusionMatrix(test_predicted, btc_test$buy_indicator)
-confMat2
-
-roc_offer <- roc(test_predicted, as.integer(btc_test$buy_indicator))
-plot(roc_offer)
-
-btc_test$pred1 <- test_predicted
-
-time_cols <- c("Date", "Close")
-btc_sub <- btc_data[, (colnames(btc_data) %in% time_cols)]
-btc_test <- left_join(btc_test, btc_sub, by="Date")
-time_cols <- c("Date", "Close", "pred1")
-btc_time <- btc_test[, (colnames(btc_test) %in% time_cols)]
-btc_points <- btc_time[btc_time$pred1 == 1, ]
-plot(x = btc_time$Date,
-    y = btc_time$Close, main = "Buy Indicators between Jun 2013 - Jan 2015")
-points(x = btc_points$Date, y=btc_points$Close, col="green")
-
-```
-
-As we can see our model did perfectly well at segmenting the data perfectly. However, it did poorly against the testing data. The columns that we care about most is the ratio between true positive false positives from a business standpoint. Reason being is that, those 2 counts indicate a buy order was made. From a business standpoint we would want to first ensure that a buy indicator indicates a winning buy order, being that the returns will be positive.
-
-This time lets train the model stripping some of the lesser important features, which should slim our data down. Then we will increase the window size of the testing in the cross validation step.
-
-```{r,eval=TRUE,warning=FALSE}
-
-# create the matrix values for the xgboost
-x_train_2 <- btc_train %>%
-                    dplyr::select(months, days, years,
-                    Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
-                    ema_log_mtdret_30, moving_avg_50_diff_7) %>%
-                  as.matrix()
-
-x_test_2 <- btc_test %>%
-                  dplyr::select(months, days, years,
-                    Bit_log_mtd_ret, ema_log_ret_14, Bit_rsi_90,
-                    ema_log_mtdret_30, moving_avg_50_diff_7) %>%
-                as.matrix()
-
-set.seed(123)
-xgb_trcontrol_2 <- caret::trainControl(
-   method = "timeslice",
-   initialWindow = 700,
-   horizon = 200,
-   fixedWindow = FALSE,
-   allowParallel = FALSE
-   )
-
-xgb_grid_2 <- base::expand.grid(
-   list(
-    nrounds = c(100, 200),
-    max_depth = c(10, 15, 20), # maximum depth of a tree
-    colsample_bytree = seq(0.5), # sub-sample ratio of columns when construction each tree
-    eta = 0.1, # learning rate
-    gamma = 0, # minimum loss reduction
-    min_child_weight = 1,  # minimum sum of instance weight (hessian) needed ina child
-    subsample = 1 # sub-sample ratio of the training instances
-    )
-)
-
-```
-
-```{r,eval=TRUE,warning=FALSE}
-
-cl <- makePSOCKcluster(5)
-registerDoParallel(cl)
+```{r, eval=TRUE, warning=FALSE, include=FALSE, cache=TRUE}
 
 xgb_model_2 <- suppressMessages(caret::train(
-   x_train, y_train,
+   x_train_2, y_train,
    trControl = xgb_trcontrol_2,
    tuneGrid = xgb_grid_2,
    method = "xgbTree",
    nthread = 1,
-   objective = "binary:logistic",
-   verbosity = 0
+   objective = "binary:logistic"
 ))
 
-stopCluster(cl)
-
 ```
+```{r, eval=TRUE, warning=FALSE}
+importance_matrix2 <- xgb.importance(model = xgb_model_2$finalModel)
+xgb.plot.importance(importance_matrix = importance_matrix2, main="Variable Importance")
+```
+Our final model includes only the most essential features to predict momentum in Bitcoin price movement. Below are the results of our final model:
 
-Although we have an accuracy of 100% on the training data, the accuracy dropped down to 66% on the test data which points to the possibility of over-fitting. Additionally, although the accuracy of 100% was higher than the 79% base line rate on the training data. This failed to translate over when the model was applied on the test data with the accuracy of 66% being below the base line rate of 67%. Sadly these results do not point to an effective model and more analysis will be required.
-
-The ROC curves also indicate possible over-fitting with the curve on the training data almost touching the upper left corner with an AUC of 100% while the curve on the test data is closer to the diagonal of the graph with an AUC of 51.9%:
-
-```{r,eval=TRUE,warning=FALSE}
-
-train_predicted_2 <- xgb_model_2 %>% predict(x_train)
-print("The accuracy score for the buy indicator is bellow:")
-Accuracy(train_predicted_2, btc_train$buy_indicator)
+```{r, eval=TRUE, warning=FALSE}
+train_predicted_2 <- xgb_model_2 %>% predict(x_train_2)
 
 # Confusion matrix
-confMat1_2 <- ConfusionMatrix(train_predicted_2, btc_train$buy_indicator)
+confMat1_2 <- confusionMatrix(train_predicted_2, as.factor(btc_train$buy_indicator), positive='1')
+print("Results on training data:")
 confMat1_2
 
-test_predicted_2 <- xgb_model_2 %>% predict(x_test)
-print("The accuracy score for the buy indicator is bellow:")
-Accuracy(test_predicted_2, btc_test$buy_indicator)
+test_predicted_2 <- xgb_model_2 %>% predict(x_test_2)
 
 # Confusion matrix
-confMat2_2 <- ConfusionMatrix(test_predicted_2, btc_test$buy_indicator)
+confMat2_2 <- confusionMatrix(test_predicted_2, as.factor(btc_test$buy_indicator), positive='1')
+print("Results on testing data:")
 confMat2_2
 
 ```
+Although we have an accuracy of 100% on the training data, the accuracy dropped down to 66% on the test data, which points to the possibility of over-fitting. The model, therefore, may not be as effective in predicting momentum in Bitcoin price movement when faced with unseen data. Additionally, although the accuracy of 100% was higher than the 79% baseline rate on the training data, this failed to translate over when the model was applied to the test data, with the accuracy of 66% being below the baseline rate of 67%. Sadly, these results do not point to an adequate model, and more analysis will be required.
 
-Check the kind of trade that the algorithm predicted.
+The ROC curves also indicate possible over-fitting, with the curve on the training data almost touching the upper left corner with an AUC of 100%, while the curve on the test data is closer to the diagonal of the graph with an AUC of 52%:
 
-```{r,eval=TRUE,warning=FALSE}
+```{r, eval=TRUE, warning=FALSE, message=FALSE}
+#Plot roc curves for training and test data
+pred_train <- xgb_model_2 %>% predict(x_train_2, type = 'prob')
+r_train = multiclass.roc(as.factor(btc_train$buy_indicator), pred_train[,2], percent = T)[['rocs']][[1]]
 
-time_cols <- c("Date", "Close")
-btc_sub <- btc_data[, (colnames(btc_data) %in% time_cols)]
-btc_test <- left_join(btc_test, btc_sub, by="Date")
-btc_test$pred_1 <- test_predicted_2
-time_cols <- c("Date", "Close", "pred_1")
-btc_time <- btc_test[, (colnames(btc_test) %in% time_cols)]
-btc_points <- btc_time[btc_time$pred_1 == 1, ]
-plot(x = btc_time$Date,
-    y = btc_time$Close, main = "Buy Indicators between Jun 2013 - Jan 2015")
-points(x = btc_points$Date, y=btc_points$Close, col="green")
+pred_test <- xgb_model_2 %>% predict(x_test_2, type = 'prob')
+r_test = multiclass.roc(as.factor(btc_test$buy_indicator), pred_test[,2], percent = T)[['rocs']][[1]]
 
-max(btc_test$Date)
+plot.roc(r_test, col = 'red', lwd = 5, main = "ROC Curves: Bitcoin Price Momentum", print.auc = T, auc.polygon = T, max.auc.polygon = T,
+         auc.polygon.col = 'lightblue')
 
+plot(r_train, add = T, col = 'blue')
 ```
-
-#### Assumptions
-
-The Covid-19 pandemic was a global event that greatly impacted the cryptocurrency market. The data used for this study undoubtedly shows the impact of this event; however, our assumption in using historical data to make predictions is that similar patterns in history are likely to reoccur in the future. Our assumption in using this data is that the underlying patterns, whether or not they have been impacted by the pandemic, will still be predictive.
-
-Additionally, since logistic regression is used for this analysis, we assume that there is a linear relationship between the predictors and the response variables and that errors are independent normal random variables with mean zero and constant variance.
-
-#### Results and Conclusions
-Below is our final model for this analysis:
-
-This model shows that the below indicator using the 50-day moving average is significant at the 95% confidence-level for the “0” level with an AIC of 398.64.
-
-The sustained below indicator variable for the 50-day moving average also proved to be significant at the 95% confidence-level for the “0” level; however it has a higher p-value and marginally higher AIC of 398.99. This was therefore not selected to be our final model.
 
 # Challenges and Limitations
 
+This analysis examined different windows of moving averages as predictors of future Bitcoin price movement. An inherent limitation of this approach is that a certain period would need to elapse before a moving average over the period can be calculated. Any model built using moving averages as predictors therefore will not react as quickly as other models. Depending on the size of the investment, this flaw could lead to substantial losses for the investor, especially in the highly volatile cryptocurrency markets. However, the conservative nature of this approach could also be seen as an advantage depending on the investor's risk appetite. More conservative investors would not want to react too quickly to random price movements as there are substantial costs to initiate any buy strategy - transaction expenses and tax implications, to name a few.
+
+An additional limitation is the use of daily data for this analysis. Cryptocurrency markets operate 24/7, and data is readily available to the fraction of a second. However, processing data of this magnitude would be no easy task, not to mention the storage and computing power required. Although there are advantages to processing more timely data as it might overcome the limitations of using moving averages as explained above, we are forced to rely on daily data due to the challenges mentioned above.
+
 # Further Discussion and Research
 
-Cryptocurrency asset class research is a rapidly evolving space, and our research is is just beginning to scratch the surface. There are several other interesting areas to look into to evolve research findings so that insights can provide a better view into answering these questions:
+This analysis used the threshold of 20% to label the target variables for Bitcoin price momentum upwards. The threshold needed to be big enough to not incorrectly flag the random noise in price movement as momentum events. The investor would not want to be too reactive to random price movement as each buy transaction requires payment of fees, and there may be tax implications as well. The 20% threshold, therefore, made the most intuitive sense, but further study will be needed to determine the optimum threshold.
 
-1. Would other moving averages besides the 10, 20, and 50 day averages be more effective?
-2. Will other options for the sustained below indicator be more predictive than 5 days?
-3. Can this analysis be modified to look at hourly or minute by minute data as opposed to daily?
-4. Would our analysis roughly stay true by increasing the data set time range?
-5. Would our analysis roughly stay true with other mainstream cryptocurrencies?
-6. Are there significant and consistent correlations between mainstream cryptocurrency features, including Bitcoin?
-7. What is the impact of taxes on market size and trading volume in the future?
-8. What was the impact of the pandemic and other global macro economic forces such as public debt and unemployment rates, on cryptocurrency features?
+We focused on predicting Bitcoin price movement upward but did not examine price movements down as this was deemed outside the scope of our initial research question. Further investigation would need to be done to see if an effective model can be created to predict downward price movements.
+
+Our analysis resulted in an overfit model. It is possible that increasing the minimum loss reduction parameter will lead to a better performing model. Further research is required to determine if this is true.
+
+Additionally, this analysis examined many different windows of moving averages and exponential moving averages for features - 7 days, 14 days, 30 days, etc. - and average log returns over the future month period for the target variable. Different windows of moving averages may be more predictive, but further research is required.
+
+One more interesting topic to discuss is the Efficient Market Hypothesis and the implications this may have for this analysis. According to Bodie, the Efficient Market Hypothesis is "the notion that stocks already reflect all available information" (Bodie 335). If the Efficient Market Hypothesis is accurate, stock prices immediately adjust to any new information made public so that historical trading data - such as what was used in this analysis - cannot be used to predict future price movement to execute successful trading strategies. The Efficient Market Hypothesis refers to traditional stock prices and it is unknown whether it also holds for cryptocurrency. Further research is needed, but if the Efficient Market Hypothesis does hold, it might partially explain the results from this analysis that predictors using moving average were not effective in predicting future Bitcoin price movements.
 
 # References
+
+[1]	“Frequently Asked Questions on Virtual Currency Transactions | Internal Revenue Service.” Irs.gov. U.S. Internal Revenue Service. N.d. Web. 04 May 2022. https://www.irs.gov/individuals/international-taxpayers/frequently-asked-questions-on-virtual-currency-transactions 
+
+[2]	“Global Cryptocurrency Market Report 2022-2027 - Industry to Cross a Staggering $32.4 Trillion by 2027, Exploding with a CAGR of 58.4%.” yahoo.com. yahoo.com Research and Markets. N.d. Web. 04 May 2022. https://finance.yahoo.com/news/global-cryptocurrency-market-report-2022-120800380.html 
+
+[3]	“Investments.” Investments, 11th edition, Bodie, Kane, and Marcus. Vk.com. N.d. Web. 04 May 2022. https://vk.com/doc399904795_482800477?hash=dsrEOFu8Ngw46PuoF8SCx47HjNUti1QlTC96UzdSEWL
+
+[4]	“Cryptocurrency Historical Prices | Kaggle.” Kaggle.com. Kaggle bitcoin dataset. N.d. Web. 04 May 2022. https://www.kaggle.com/datasets/sudalairajkumar/cryptocurrencypricehistory?resource=download 
+	
+[5]	“Exponential Moving Average (EMA) Definition.” Investopedia.com. Technical Analysis Basic Education. N.d. Web. 04 May 2022. https://www.investopedia.com/terms/e/ema.asp
+	
+[6]	“Relative Strength Index (RSI) Definition.” Investopedia.com. Technical Analysis Basic Education. N.d. Web. 04 May 2022. https://www.investopedia.com/terms/r/rsi.asp
+	
+[7]	“Augmented Dickey-Fuller Test in R (With Example).” Statology.org. Statology. N.d. Web. 04 May 2022. https://www.statology.org/dickey-fuller-test-in-r/ 
+
+[8]	“6.4.4.2 Stationarity.” Nist.gov. Engineering Statistics Handbook. N.d. Web. 04 May 2022. https://www.itl.nist.gov/div898/handbook/pmc/section4/pmc442.htm 
+
+[9]	“How to Remove Non-Stationarity in Time Series Forecasting | by Bex T. | Towards Data Science.” Towardsdatascience.com. How to Remove Non-Stationarity in Time Series Forecasting. N.d. Web. 04 May 2022. https://towardsdatascience.com/how-to-remove-non-stationarity-in-time-series-forecasting-563c05c4bfc7 
+
